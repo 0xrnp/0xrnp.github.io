@@ -95,11 +95,11 @@
     Rex (Superlogical's terminal multiplexer) + Neovim
 
 <b>STACK</b>
-    Go, TypeScript, AWS (ECS, SQS, EventBridge),
+    Go, TypeScript, AWS,
     MongoDB, PostgreSQL, Elasticsearch
 
 <b>HISTORY</b>
-    ASBL (current) &gt; Sambuq &gt; Inncircles</div>
+    ASBL (current) &gt; Inncircles &gt; Sambuq</div>
 
   <h2>production impact</h2>
   <div class="diff">
@@ -115,6 +115,10 @@
     <div class="a">+ Moved to ECS Scheduled Tasks</div>
     <div class="a">+ Automated EventBridge/SQS reconciliation pipelines</div>
 
+    <div class="h">[inncircles.ops]</div>
+    <div class="d">- Multi-hour MTTR on production incidents</div>
+    <div class="a">+ Standardized telemetry + runbooks: MTTR &lt; 20 min</div>
+    
     <div class="h">[sambuq.search]</div>
     <div class="d">- Node.js hot path choking at 1.8s catalog search</div>
     <div class="a">+ Rebuilt in Go: 3x throughput</div>
@@ -124,9 +128,6 @@
     <div class="d">- Webhook race conditions, dropped state transitions</div>
     <div class="a">+ Idempotent Razorpay state machine + SQS DLQs</div>
 
-    <div class="h">[inncircles.ops]</div>
-    <div class="d">- Multi-hour MTTR on production incidents</div>
-    <div class="a">+ Standardized telemetry + runbooks: MTTR &lt; 20 min</div>
   </div>
 
   <h2>public work</h2>
