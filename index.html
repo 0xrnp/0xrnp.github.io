@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rudra Narayan Panda · 0xrnp</title>
+<meta name="description" content="Backend engineer who makes systems faster, cheaper, and harder to break.">
+<style>
+  :root {
+    --bg: #f4f2ee;
+    --ink: #22252b;
+    --muted: #6b707a;
+    --accent: #a8431a;
+    --add: #1f7a3d;
+    --del: #b3261e;
+    --panel: #e9e6e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171b;
+      --ink: #dfe2e7;
+      --muted: #8b919c;
+      --accent: #f0905a;
+      --add: #6fd08c;
+      --del: #f07a72;
+      --panel: #1d2026;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.7 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
+  header { margin-bottom: 2.5rem; }
+  h1 {
+    font: 400 clamp(2.2rem, 8vw, 3.6rem)/1.05 Georgia, "Times New Roman", serif;
+    letter-spacing: -0.03em;
+    margin: 0 0 0.75rem;
+  }
+  .lead { font: 1.2rem/1.5 Georgia, serif; margin: 0 0 0.5rem; }
+  .meta { color: var(--muted); font-size: 0.9rem; margin: 0; }
+  h2 { font-size: 1rem; font-weight: 700; color: var(--accent); margin: 2.5rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  .man { background: var(--panel); padding: 1.25rem 1.5rem; overflow-x: auto; white-space: pre; font-size: 0.9rem; margin: 0; }
+  .man b { color: var(--accent); }
+  .diff { background: var(--panel); padding: 1.25rem 1.5rem; overflow-x: auto; font-size: 0.88rem; }
+  .diff div { white-space: pre; }
+  .diff .h { color: var(--accent); margin-top: 0.9rem; }
+  .diff .h:first-child { margin-top: 0; }
+  .diff .a { color: var(--add); }
+  .diff .d { color: var(--del); }
+  .diff .c { color: var(--muted); }
+  dl { margin: 0; }
+  dt { color: var(--accent); }
+  dd { margin: 0 0 0.6rem 1.5rem; }
+  ul { margin: 0; padding-left: 1.25rem; }
+  nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+  footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; font-style: italic; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Rudra Narayan Panda</h1>
+    <p class="lead">Backend engineer who makes systems faster, cheaper, and harder to break.</p>
+    <p class="meta">Go · AWS · Distributed systems<br>SWE L2 @ ASBL · Hyderabad</p>
+  </header>
+
+  <nav>
+    <a href="https://github.com/0xrnp">GitHub</a>
+    <a href="https://linkedin.com/in/0xrnp">LinkedIn</a>
+    <a href="https://x.com/debuggingpanda">X</a>
+    <a href="https://github.com/0xrnp/dotfiles">Dotfiles</a>
+    <a href="https://leetcode.com/u/0xrnp/">LeetCode</a>
+  </nav>
+
+  <h2>about</h2>
+<div class="man"><b>RNP(1)</b>                  Systems &amp; Backend Manual
+
+<b>NAME</b>
+    0xrnp - latency hunter, terminal minimalist
+
+<b>DESCRIPTION</b>
+    Builds high-throughput Go microservices and distributed
+    cloud infrastructure. Started in chemistry, pivoted to
+    computer applications, now obsessed with storage engines,
+    write paths, and cutting database bills without touching
+    latency.
+
+<b>ENVIRONMENT</b>
+    Rex (Superlogical's terminal multiplexer) + Neovim
+
+<b>STACK</b>
+    Go, TypeScript, AWS (ECS, SQS, EventBridge),
+    MongoDB, PostgreSQL, Elasticsearch
+
+<b>HISTORY</b>
+    ASBL (current) &gt; Sambuq &gt; Inncircles</div>
+
+  <h2>production impact</h2>
+  <div class="diff">
+    <div class="c"># selected production overwrites</div>
+
+    <div class="h">[asbl.mongodb]</div>
+    <div class="d">- Atlas M60 burning compute on unindexed scans</div>
+    <div class="a">+ Rewrote queries + compound indexes</div>
+    <div class="a">+ Stepped down to M30: ~55% cheaper, p95 &lt; 50ms</div>
+
+    <div class="h">[asbl.infra]</div>
+    <div class="d">- Ad-hoc cron jobs + manual financial reconciliation</div>
+    <div class="a">+ Moved to ECS Scheduled Tasks</div>
+    <div class="a">+ Automated EventBridge/SQS reconciliation pipelines</div>
+
+    <div class="h">[sambuq.search]</div>
+    <div class="d">- Node.js hot path choking at 1.8s catalog search</div>
+    <div class="a">+ Rebuilt in Go: 3x throughput</div>
+    <div class="a">+ Elasticsearch n-grams: p95 &lt; 80ms</div>
+
+    <div class="h">[sambuq.payments]</div>
+    <div class="d">- Webhook race conditions, dropped state transitions</div>
+    <div class="a">+ Idempotent Razorpay state machine + SQS DLQs</div>
+
+    <div class="h">[inncircles.ops]</div>
+    <div class="d">- Multi-hour MTTR on production incidents</div>
+    <div class="a">+ Standardized telemetry + runbooks: MTTR &lt; 20 min</div>
+  </div>
+
+  <h2>public work</h2>
+  <p>Most of my production work lives in private repos. What you can read and run today:</p>
+  <ul>
+    <li><a href="https://github.com/0xrnp/dotfiles">dotfiles</a>: the <a href="https://www.superlogical.com">Rex</a> + Neovim setup I use every day.</li>
+  </ul>
+
+  <h2>currently</h2>
+  <div class="man"><b>rust</b>          the compiler is winning
+<b>cassandra</b>     reading the LSM-tree write path &amp; compaction
+<b>surrealdb</b>     poking at storage primitives
+<b>open question</b> what happens when a node dies mid-write?</div>
+
+  <h2>ask me about</h2>
+  <p>Query tuning and index design · Go service performance · idempotent payment and webhook flows · cutting database costs without hurting latency · incident response and runbooks</p>
+
+  <h2>say hi</h2>
+  <p>Open to conversations about backend, storage, and infra problems. Best reached on <a href="https://linkedin.com/in/0xrnp">LinkedIn</a> or <a href="https://x.com/debuggingpanda">X</a>.</p>
+
+  <footer>"Sacrifice is the only way!"</footer>
+</main>
+</body>
+</html>
