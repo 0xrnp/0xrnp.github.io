@@ -6,13 +6,60 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>Rudra Narayan Panda · 0xrnp</title>
 <meta name="description" content="Backend engineer who makes systems faster, cheaper, and harder to break.">
+<link rel="canonical" href="https://0xrnp.github.io/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Rudra Narayan Panda · 0xrnp">
+<meta property="og:description" content="Backend engineer who makes systems faster, cheaper, and harder to break.">
+<meta property="og:url" content="https://0xrnp.github.io/">
+<meta property="og:image" content="https://0xrnp.github.io/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Rudra Narayan Panda, backend engineer: faster, cheaper, harder to break systems.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Rudra Narayan Panda · 0xrnp">
+<meta name="twitter:description" content="Backend engineer who makes systems faster, cheaper, and harder to break.">
+<meta name="twitter:image" content="https://0xrnp.github.io/og-image.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "Rudra Narayan Panda",
+  "alternateName": "0xrnp",
+  "url": "https://0xrnp.github.io/",
+  "jobTitle": "Software Engineer",
+  "worksFor": { "@type": "Organization", "name": "ASBL" },
+  "address": { "@type": "PostalAddress", "addressLocality": "Hyderabad", "addressCountry": "IN" },
+  "knowsAbout": ["Go", "AWS", "Distributed systems", "MongoDB", "PostgreSQL", "Elasticsearch"],
+  "sameAs": [
+    "https://github.com/0xrnp",
+    "https://linkedin.com/in/0xrnp",
+    "https://x.com/debuggingpanda"
+  ]
+}
+</script>
+<link rel="preload" href="/fonts/MapleMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  @font-face {
+    font-family: "Maple Mono";
+    src: url("/fonts/MapleMono-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Maple Mono";
+    src: url("/fonts/MapleMono-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+  }
   :root {
+    --mono: "Maple Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --bg: #f4f2ee;
     --ink: #22252b;
-    --muted: #6b707a;
+    --muted: #595e68;
     --accent: #a8431a;
-    --add: #1f7a3d;
+    --add: #19672f;
     --del: #b3261e;
     --panel: #e9e6e0;
   }
@@ -32,7 +79,7 @@
     margin: 0;
     background: var(--bg);
     color: var(--ink);
-    font: 16px/1.7 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font: 16px/1.7 var(--mono);
   }
   main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
   header { margin-bottom: 2.5rem; }
@@ -61,11 +108,41 @@
   nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; }
   a { color: var(--accent); text-decoration: none; }
   a:hover, a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+  @media (max-width: 40rem) {
+    .man, .diff, .term { padding: 1rem; font-size: 0.82rem; }
+    .man { white-space: pre-wrap; }
+    .diff div { white-space: pre-wrap; padding-left: 2ch; text-indent: -2ch; }
+    .diff .h, .diff .c { padding-left: 0; text-indent: 0; }
+  }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--bg); padding: 0.4rem 0.8rem; z-index: 10; }
+  .skip:focus { left: 0.5rem; top: 0.5rem; }
+  .man:focus-visible, .diff:focus-visible, button.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #live { margin: 0.75rem 0 0; }
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+  }
+  .term { background: var(--panel); padding: 1.25rem 1.5rem; font-size: 0.9rem; }
+  .term-out { white-space: pre-wrap; word-break: break-word; max-height: 18rem; overflow-y: auto; }
+  .term-out .cmd { color: var(--accent); }
+  .term form { display: flex; gap: 0.6rem; margin: 0.4rem 0 0; }
+  .term .ps { color: var(--accent); }
+  .term input {
+    flex: 1; min-width: 0; background: transparent; border: 0; padding: 0;
+    color: var(--ink); font: inherit; outline: none;
+    caret-color: var(--accent);
+  }
+  .term:focus-within { outline: 1px solid var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.6rem 1.25rem; align-items: center; margin: 0 0 1rem; }
+  button.copy {
+    font: inherit; font-size: 0.9rem; color: var(--accent); background: none;
+    border: 1px solid var(--accent); padding: 0.1rem 0.7rem; cursor: pointer;
+  }
+  button.copy:hover, button.copy:focus-visible { background: var(--accent); color: var(--bg); }
   footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; font-style: italic; }
 </style>
 </head>
 <body>
-<main>
+<a class="skip" href="#main">Skip to content</a><main id="main">
   <header>
     <h1>Rudra Narayan Panda</h1>
     <p class="lead">Backend engineer who makes systems faster, cheaper, and harder to break.</p>
@@ -77,10 +154,11 @@
     <a href="https://linkedin.com/in/0xrnp">LinkedIn</a>
     <a href="https://x.com/debuggingpanda">X</a>
     <a href="https://github.com/0xrnp/dotfiles">Dotfiles</a>
+    <a href="/writing/">Writing</a>
   </nav>
 
   <h2>about</h2>
-<div class="man"><b>RNP(1)</b>                  Systems &amp; Backend Manual
+<div class="man" tabindex="0" role="region" aria-label="About, formatted as a manual page"><b>RNP(1)</b>                  Systems &amp; Backend Manual
 
 <b>NAME</b>
     0xrnp - latency hunter, terminal minimalist
@@ -103,7 +181,7 @@
     ASBL (current) &gt; Inncircles &gt; Sambuq</div>
 
   <h2>production impact</h2>
-  <div class="diff">
+  <div class="diff" tabindex="0" role="region" aria-label="Production impact, formatted as a diff">
     <div class="c"># selected production overwrites</div>
 
     <div class="h">[asbl.mongodb]</div>
@@ -138,18 +216,191 @@
   </ul>
 
   <h2>currently</h2>
-  <div class="man"><b>rust</b>          the compiler is winning
+  <div class="man" tabindex="0" role="region" aria-label="What I am learning now"><b>rust</b>          the compiler is winning
 <b>cassandra</b>     reading the LSM-tree write path &amp; compaction
 <b>surrealdb</b>     poking at storage primitives
 <b>open question</b> what happens when a node dies mid-write?</div>
+  <p class="meta" id="live" hidden></p>
 
   <h2>ask me about</h2>
   <p>Query tuning and index design · Go service performance · idempotent payment and webhook flows · cutting database costs without hurting latency · incident response and runbooks</p>
 
   <h2>say hi</h2>
-  <p>Open to conversations about backend, storage, and infra problems. Best reached on <a href="https://linkedin.com/in/0xrnp">LinkedIn</a> or <a href="https://x.com/debuggingpanda">X</a>.</p>
+  <p>Open to conversations about backend, storage, and infra problems.</p>
+  <div class="actions">
+    <a id="mail" href="#">email me</a>
+    <button type="button" class="copy" id="copy">copy address</button>
+    <a href="https://linkedin.com/in/0xrnp">LinkedIn</a>
+    <a href="https://x.com/debuggingpanda">X</a>
+  </div>
+
+  <h2>try the terminal</h2>
+  <div class="term" id="term">
+    <div class="term-out" id="out" role="log" aria-live="polite"></div>
+    <form id="form" autocomplete="off">
+      <label class="ps" for="in">$</label>
+      <input id="in" type="text" spellcheck="false" autocapitalize="off" placeholder="type help">
+    </form>
+  </div>
 
   <footer>"Sacrifice is the only way!"</footer>
 </main>
+<script>
+(function () {
+  // Replace with the address you want public; both the link and the terminal read it.
+  var EMAIL = "rnp.rudranarayanpanda@gmail.com";
+
+  var mail = document.getElementById("mail");
+  var copyBtn = document.getElementById("copy");
+  mail.href = "mailto:" + EMAIL;
+
+  copyBtn.addEventListener("click", function () {
+    var done = function (t) {
+      copyBtn.textContent = t;
+      setTimeout(function () { copyBtn.textContent = "copy address"; }, 1500);
+    };
+    try {
+      navigator.clipboard.writeText(EMAIL).then(
+        function () { done("copied"); },
+        function () { done("copy failed"); }
+      );
+    } catch (e) { done("copy failed"); }
+  });
+
+  var out = document.getElementById("out");
+  var form = document.getElementById("form");
+  var input = document.getElementById("in");
+
+  var commands = {
+    help: function () {
+      return [
+        "help         this list",
+        "whoami       one line about me",
+        "ls           what I work on",
+        "cat contact  how to reach me",
+        "sudo hire-me nice try",
+        "uptime       how this runs",
+        "cat /etc/motd message of the day",
+        "clear        clear the screen",
+        "",
+        "Tab completes, up/down arrows recall history."
+      ].join("\n");
+    },
+    uptime: function () {
+      return "running on coffee, EXPLAIN ANALYZE, and one open question about nodes dying mid-write.";
+    },
+    "cat /etc/motd": function () {
+      return "\"Sacrifice is the only way!\"";
+    },
+    whoami: function () {
+      return "Rudra Narayan Panda: backend engineer, Go + AWS + distributed systems, SWE L2 @ ASBL, Hyderabad.";
+    },
+    ls: function () {
+      return [
+        "query-tuning/   index-design/   go-performance/",
+        "payments/       webhooks/       incident-response/",
+        "storage-engines/   (currently: cassandra, surrealdb, rust)"
+      ].join("\n");
+    },
+    "cat contact": function () {
+      return "email     " + EMAIL + "\nlinkedin  linkedin.com/in/0xrnp\nx         x.com/debuggingpanda\ngithub    github.com/0xrnp";
+    },
+    "sudo hire-me": function () {
+      return "0xrnp is not in the sudoers file. This incident will be reported.\n(Just email me instead.)";
+    }
+  };
+
+  function print(text, cls) {
+    var d = document.createElement("div");
+    if (cls) d.className = cls;
+    d.textContent = text;
+    out.appendChild(d);
+    out.scrollTop = out.scrollHeight;
+  }
+
+  print("type help to see what works.");
+
+  var names = Object.keys(commands).concat("clear");
+  var history = [];
+  var pos = 0;
+
+  function distance(a, b) {
+    var prev = [], i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      var cur = [i];
+      for (j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+
+  function suggest(key) {
+    var best = null, bestD = 3;
+    names.forEach(function (n) {
+      var d = distance(key, n);
+      if (d < bestD) { bestD = d; best = n; }
+    });
+    return best;
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var raw = input.value.trim().replace(/\s+/g, " ");
+    input.value = "";
+    if (!raw) return;
+    history.push(raw);
+    pos = history.length;
+    print("$ " + raw, "cmd");
+    var key = raw.toLowerCase();
+    if (key === "clear") { out.textContent = ""; return; }
+    if (Object.prototype.hasOwnProperty.call(commands, key)) {
+      print(commands[key]());
+      return;
+    }
+    var hint = suggest(key);
+    print(raw.split(" ")[0] + ": command not found." + (hint ? " did you mean '" + hint + "'?" : " try help"));
+  });
+
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (pos > 0) { pos--; input.value = history[pos]; }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (pos < history.length - 1) { pos++; input.value = history[pos]; }
+      else { pos = history.length; input.value = ""; }
+    } else if (e.key === "Tab") {
+      var v = input.value.toLowerCase();
+      if (!v) return;
+      e.preventDefault();
+      var m = names.filter(function (n) { return n.indexOf(v) === 0; });
+      if (m.length === 1) input.value = m[0];
+      else if (m.length > 1) print(m.join("   "));
+    }
+  });
+
+  var live = document.getElementById("live");
+  function ago(iso) {
+    var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 3600) return Math.max(1, Math.round(s / 60)) + " min ago";
+    if (s < 86400) return Math.round(s / 3600) + " h ago";
+    return Math.round(s / 86400) + " d ago";
+  }
+  try {
+    fetch("https://api.github.com/users/0xrnp/events/public", { headers: { Accept: "application/vnd.github+json" } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (events) {
+        var push = events.filter(function (ev) { return ev.type === "PushEvent"; })[0];
+        if (!push) return;
+        live.textContent = "last push: " + push.repo.name + ", " + ago(push.created_at);
+        live.hidden = false;
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>

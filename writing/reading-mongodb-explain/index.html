@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Reading a MongoDB explain() in five minutes · 0xrnp</title>
+<meta name="description" content="Three numbers in explain('executionStats') tell you whether a MongoDB query is healthy, and one index rule fixes most slow ones.">
+<link rel="canonical" href="https://0xrnp.github.io/writing/reading-mongodb-explain/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Reading a MongoDB explain() in five minutes">
+<meta property="og:description" content="Three numbers in explain('executionStats') tell you whether a MongoDB query is healthy, and one index rule fixes most slow ones.">
+<meta property="og:url" content="https://0xrnp.github.io/writing/reading-mongodb-explain/">
+<meta property="og:image" content="https://0xrnp.github.io/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="/fonts/MapleMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+  :root {
+    --mono: "Maple Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #f4f2ee; --ink: #22252b; --muted: #595e68; --accent: #a8431a; --panel: #e9e6e0; --add: #19672f; --del: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171b; --ink: #dfe2e7; --muted: #8b919c; --accent: #f0905a; --panel: #1d2026; --add: #6fd08c; --del: #f07a72; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--mono); }
+  main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
+  h1 { font: 400 clamp(2rem, 7vw, 3rem)/1.1 Georgia, "Times New Roman", serif; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+  h2 { font-size: 1rem; font-weight: 700; color: var(--accent); margin: 2.5rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+  pre { background: var(--panel); padding: 1rem 1.25rem; overflow-x: auto; font: inherit; font-size: 0.85rem; margin: 0 0 1rem; }
+  code { font: inherit; }
+  p code, li code { background: var(--panel); padding: 0.05rem 0.35rem; font-size: 0.88em; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin: 0 0 1rem; display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; vertical-align: top; }
+  th { color: var(--accent); border-bottom: 1px solid var(--muted); }
+  ul, ol { margin: 0 0 1rem; padding-left: 1.25rem; }
+  li { margin-bottom: 0.3rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+  .good { color: var(--add); }
+  .bad { color: var(--del); }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--bg); padding: 0.4rem 0.8rem; }
+  .skip:focus { left: 0.5rem; top: 0.5rem; }
+  pre:focus-visible, table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<main id="main">
+  <p><a href="/writing/">&larr; writing</a></p>
+
+  <h1>Reading a MongoDB explain() in five minutes</h1>
+  <p class="muted">Rudra Narayan Panda &middot; <time datetime="2026-11-13">13 Nov 2026</time></p>
+
+  <p>A slow query usually shows its cause in three numbers. Run the query with <code>explain("executionStats")</code> and read these before anything else.</p>
+
+  <h2>the three numbers</h2>
+  <ul>
+    <li><b>Stage names</b> in <code>winningPlan</code>. <code>COLLSCAN</code> means a full collection scan. <code>IXSCAN</code> means an index was used. A <code>SORT</code> stage means the database sorted the results itself instead of reading them in index order.</li>
+    <li><b><code>totalKeysExamined</code> and <code>totalDocsExamined</code></b> against <code>nReturned</code>. Examining far more than you return is wasted work.</li>
+    <li><b>Where <code>FETCH</code> sits.</b> It loads full documents, so you want it to see as few as possible.</li>
+  </ul>
+
+  <h2>the experiment</h2>
+  <p>A toy <code>payments</code> collection with 300,000 generated documents on MongoDB 8.2.5, run locally. About half the payments are <code>captured</code>, and <code>amount</code> is spread evenly from 1 to 1000. The query asks for the 20 newest captured payments over 900:</p>
+<pre tabindex="0"><code>db.payments
+  .find({ status: "captured", amount: { $gt: 900 } })
+  .sort({ createdAt: -1 })
+  .limit(20)
+  .explain("executionStats")</code></pre>
+
+  <p>Here is what I got for three setups:</p>
+  <table tabindex="0" aria-label="Explain results for three index setups">
+    <thead><tr><th>setup</th><th>plan</th><th>keys</th><th>docs</th></tr></thead>
+    <tbody>
+      <tr><td>no index</td><td><span class="bad">SORT &lt;- COLLSCAN</span></td><td>0</td><td class="bad">300,000</td></tr>
+      <tr><td>index on <code>status, amount, createdAt</code></td><td>FETCH &lt;- <span class="bad">SORT</span> &lt;- IXSCAN</td><td class="bad">14,905</td><td>20</td></tr>
+      <tr><td>index on <code>status, createdAt, amount</code></td><td class="good">LIMIT &lt;- FETCH &lt;- IXSCAN</td><td class="good">265</td><td>20</td></tr>
+    </tbody>
+  </table>
+  <p>All three return the same 20 documents. They differ in how much work it takes to find them.</p>
+
+  <h2>why the second index is still slow</h2>
+  <p>The second index filters well but cannot hand back results in <code>createdAt</code> order, because <code>amount</code> sits between <code>status</code> and <code>createdAt</code>. The database reads every matching key (14,905 of them), sorts them, then fetches the top 20. That <code>SORT</code> stage is the cost.</p>
+
+  <h2>the rule behind the third index</h2>
+  <p>Order compound index fields as <b>Equality, Sort, Range</b>. Equality fields first (<code>status</code>), then the sort field (<code>createdAt</code>), then range fields (<code>amount</code>). Now the database walks the index already in sort order, checks <code>amount</code> from the index itself, and stops after 20 matches. It examined 265 keys, close to the 20 / 0.1 you would expect when about one in ten captured payments passes the range.</p>
+<pre tabindex="0"><code>db.payments.createIndex({ status: 1, createdAt: -1, amount: 1 })</code></pre>
+
+  <p class="muted">Timing on this small local run was 68 ms, then 7 ms, then 1 ms. I would not quote that. Keys and documents examined are the stable signal, and timing on a tiny dataset is noisy.</p>
+
+  <h2>one caveat</h2>
+  <p>Equality, Sort, Range is a starting point, not a law. If the range is very selective and the sort has no <code>limit</code>, putting the range before the sort can examine fewer keys. Run <code>explain</code> on your own query and compare, as above.</p>
+
+  <h2>the surprise</h2>
+  <p>Once I could read a query plan, I couldn't stop seeing them. Queries I'd written off as fine, mine and the team's alike, showed a <code>COLLSCAN</code> or a <code>SORT</code> stage I had never looked for, and fixing them took up the next couple of weeks. The surprise wasn't the rule. It was how much I'd been missing by never running <code>explain</code>.</p>
+
+  <h2>what to check next</h2>
+  <ul>
+    <li>Run the same <code>explain</code> on your slowest real query and look for <code>COLLSCAN</code> and a <code>SORT</code> stage.</li>
+    <li>Compare <code>totalKeysExamined</code> and <code>totalDocsExamined</code> with <code>nReturned</code>.</li>
+    <li>Remember each index costs write time and memory, so add one deliberately and drop the ones you replace.</li>
+  </ul>
+</main>
+</body>
+</html>

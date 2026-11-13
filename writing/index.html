@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Writing · 0xrnp</title>
+<meta name="description" content="Notes on query tuning, payment flows, and storage engines by Rudra Narayan Panda.">
+<link rel="canonical" href="https://0xrnp.github.io/writing/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Writing · 0xrnp">
+<meta property="og:description" content="Notes on query tuning, payment flows, and storage engines.">
+<meta property="og:url" content="https://0xrnp.github.io/writing/">
+<meta property="og:image" content="https://0xrnp.github.io/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="/fonts/MapleMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+  :root {
+    --mono: "Maple Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #f4f2ee; --ink: #22252b; --muted: #595e68; --accent: #a8431a; --panel: #e9e6e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171b; --ink: #dfe2e7; --muted: #8b919c; --accent: #f0905a; --panel: #1d2026; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--mono); }
+  main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
+  h1 { font: 400 clamp(2.2rem, 8vw, 3.6rem)/1.05 Georgia, "Times New Roman", serif; letter-spacing: -0.03em; margin: 0 0 0.75rem; }
+  h2 { font-size: 1rem; font-weight: 700; color: var(--accent); margin: 2.5rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  .muted { color: var(--muted); }
+  .panel { background: var(--panel); padding: 1.25rem 1.5rem; white-space: pre-wrap; font-size: 0.9rem; }
+  .panel b { color: var(--accent); }
+  ul { margin: 0; padding-left: 1.25rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--bg); padding: 0.4rem 0.8rem; }
+  .skip:focus { left: 0.5rem; top: 0.5rem; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<main id="main">
+  <p><a href="/">&larr; back home</a></p>
+  <h1>Writing</h1>
+  <p class="muted">Notes from production work and from reading how storage engines behave when things go wrong.</p>
+
+  <div class="panel"><b>$</b> ls posts/
+reading-mongodb-explain/</div>
+
+  <h2>posts</h2>
+  <ul>
+    <li><time datetime="2026-11-13">13 Nov 2026</time> <a href="/writing/reading-mongodb-explain/">Reading a MongoDB explain() in five minutes</a></li>
+  </ul>
+
+  <h2>next up</h2>
+  <ul>
+    <li>idempotent payment and webhook flows</li>
+    <li>cutting database cost without hurting latency</li>
+    <li>storage engines: write paths and compaction</li>
+  </ul>
+
+  <h2>tell me what to write next</h2>
+  <p>If one of these is a problem you are dealing with, say so. It will move up the list. Reach me on <a href="https://linkedin.com/in/0xrnp">LinkedIn</a>, <a href="https://x.com/debuggingpanda">X</a>, or by <a href="/#mail">email</a> from the home page.</p>
+</main>
+</body>
+</html>
