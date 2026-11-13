@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>What a goroutine actually is · 0xrnp</title>
+<meta name="description" content="Goroutines are not threads. How stacks, the G-M-P scheduler, blocking and preemption work, with a scheduler you can step through.">
+<link rel="canonical" href="https://0xrnp.github.io/writing/goroutines-explained/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="What a goroutine actually is">
+<meta property="og:description" content="Goroutines are not threads. How stacks, the G-M-P scheduler, blocking and preemption work, with a scheduler you can step through.">
+<meta property="og:url" content="https://0xrnp.github.io/writing/goroutines-explained/">
+<meta property="og:image" content="https://0xrnp.github.io/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="/fonts/MapleMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+  :root {
+    --mono: "Maple Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #f4f2ee; --ink: #22252b; --muted: #595e68; --accent: #a8431a; --panel: #e9e6e0; --add: #19672f; --del: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171b; --ink: #dfe2e7; --muted: #8b919c; --accent: #f0905a; --panel: #1d2026; --add: #6fd08c; --del: #f07a72; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--mono); }
+  main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
+  h1 { font: 400 clamp(2rem, 7vw, 3rem)/1.1 Georgia, "Times New Roman", serif; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+  h2 { font-size: 1rem; font-weight: 700; color: var(--accent); margin: 2.5rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+  pre { background: var(--panel); padding: 1rem 1.25rem; overflow-x: auto; font: inherit; font-size: 0.85rem; margin: 0 0 1rem; tab-size: 4; }
+  pre, code { font-variant-ligatures: none; }
+  code { font: inherit; font-variant-ligatures: none; }
+  p code, li code, figcaption code { background: var(--panel); padding: 0.05rem 0.35rem; font-size: 0.88em; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin: 0 0 1rem; display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; vertical-align: top; }
+  th { color: var(--accent); border-bottom: 1px solid var(--muted); }
+  ul, ol { margin: 0 0 1rem; padding-left: 1.25rem; }
+  li { margin-bottom: 0.3rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--bg); padding: 0.4rem 0.8rem; }
+  .skip:focus { left: 0.5rem; top: 0.5rem; }
+  pre:focus-visible, table:focus-visible, .scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  figure { margin: 1.5rem 0; }
+  figcaption { color: var(--muted); font-size: 0.82rem; margin-top: 0.6rem; }
+  .scroll { overflow-x: auto; }
+  .scroll svg { display: block; min-width: 620px; width: 100%; height: auto; }
+  .stacks { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+  .stacks svg { width: 20rem; max-width: 100%; height: auto; flex: none; }
+  .stacks ul { flex: 1 1 14rem; margin: 0; list-style: none; padding: 0; font-size: 0.85rem; }
+
+  svg .frame { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+  svg .dash { stroke-dasharray: 5 4; }
+  svg .line { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+  svg .chip { fill: var(--bg); stroke: var(--ink); stroke-width: 1.2; }
+  svg .chip.hot { fill: var(--accent); stroke: var(--accent); }
+  svg .t { fill: var(--ink); font: 14px var(--mono); }
+  svg .tb { fill: var(--accent); font: 700 15px var(--mono); }
+  svg .tm { fill: var(--muted); font: 13px var(--mono); }
+  svg .tc { fill: var(--ink); font: 12px var(--mono); }
+  svg .tc.hot { fill: var(--bg); }
+  svg .cell { fill: var(--muted); }
+  svg .cell1 { fill: var(--accent); }
+  svg .ring { fill: none; stroke: var(--accent); stroke-width: 2; }
+
+  .sim { background: var(--panel); padding: 1rem; margin: 1.5rem 0; font-size: 0.85rem; }
+  .sim button { font: inherit; font-size: 0.82rem; color: var(--ink); background: var(--bg); border: 1px solid var(--muted); padding: 0.45rem 0.8rem; cursor: pointer; }
+  .sim button:hover:not(:disabled) { border-color: var(--accent); }
+  .sim button:focus-visible, .sim select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sim button[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .sim button:disabled { opacity: 0.5; cursor: default; }
+  .sim select { font: inherit; font-size: 0.82rem; color: var(--ink); background: var(--bg); border: 1px solid var(--muted); padding: 0.4rem 0.5rem; }
+  .bar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.75rem; align-items: center; }
+  .bar .sp { flex: 1 1 1rem; }
+  .status { color: var(--muted); margin: 0.75rem 0; }
+  .ps { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.6rem; margin-bottom: 0.6rem; }
+  .box { border: 1px solid var(--muted); background: var(--bg); padding: 0.5rem 0.6rem; min-height: 3.2rem; }
+  .box + .box, .ps + .box { margin-top: 0; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.6rem; margin-top: 0.6rem; }
+  .lbl { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.2rem; }
+  .row { margin-bottom: 0.15rem; min-height: 1.7rem; }
+  .empty { color: var(--muted); font-size: 0.78rem; }
+  .g { display: inline-block; border: 1px solid var(--ink); padding: 0 0.4rem; margin: 0 0.25rem 0.25rem 0; font-size: 0.78rem; background: var(--bg); }
+  .g i { font-style: normal; color: var(--muted); margin-left: 0.3rem; }
+  .k-chan { border-style: dashed; }
+  .k-sys { border-width: 1px 1px 1px 5px; }
+  .k-spin { border-width: 2px; }
+  .run .g { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .run .g i { color: var(--bg); }
+  #log { margin: 0.75rem 0 0; padding: 0; list-style: none; font-size: 0.8rem; min-height: 6rem; }
+  #log li { margin: 0 0 0.25rem; }
+  #log time { color: var(--accent); margin-right: 0.5rem; }
+  #log li:not(:first-child) { color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<main id="main">
+  <p><a href="/writing/">&larr; writing</a></p>
+
+  <h1>What a goroutine actually is</h1>
+  <p class="muted">Rudra Narayan Panda &middot; <time datetime="2026-11-13">13 Nov 2026</time></p>
+
+  <p>A goroutine looks like a function call with <code>go</code> in front of it. That is the entire syntax. What took me longer to understand was what the runtime does with it, and why you can start a hundred thousand of them on a laptop without the machine noticing.</p>
+  <p>This post is the mental model I wish I had started with: what a goroutine is made of, how the scheduler decides what runs, and what happens when one of them blocks. Most of it you can watch happen in the simulator further down. I ran the code and the numbers myself, on Go 1.27.4 on an Apple Silicon Mac. Your numbers will differ a little.</p>
+
+  <h2>the smallest example</h2>
+<pre tabindex="0"><code>package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	for i := 1; i &lt;= 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fmt.Println("hello from goroutine", i)
+		}()
+	}
+	wg.Wait()
+}</code></pre>
+  <p>Run it a few times and the lines come out in a different order. That is the first thing to accept: once you write <code>go</code>, you no longer control the order. The runtime decides.</p>
+  <p>The <code>WaitGroup</code> is there for a reason. When <code>main</code> returns, the program exits, and every other goroutine is killed on the spot, mid-sentence if it has to be. Without <code>wg.Wait()</code> you would probably see nothing printed at all.</p>
+  <p class="muted">Since Go 1.22 each loop iteration gets its own <code>i</code>. On older versions all three goroutines could print the same number, and you had to pass <code>i</code> in as an argument.</p>
+
+  <h2>why not just use threads</h2>
+  <p>An operating system thread is a kernel object. The kernel schedules it, and it gets a stack whose size is fixed when the thread is created. On Linux that is commonly 8 MB of address space, and other systems pick other defaults, usually somewhere from 1 to 8 MB. Most of that is not backed by real memory until it is touched, so it is not as bad as it sounds. But the size cannot change later, and every switch from one thread to another goes through the kernel.</p>
+  <p>That is fine for a few hundred threads. It gets uncomfortable at tens of thousands, and a server that wants one unit of work per connection or per request wants far more than that. Eight megabytes times a hundred thousand is 800 GB of address space, and most systems will refuse before you get there, on a process or memory limit.</p>
+  <p>Go's answer is to not give every unit of work a thread. It gives each one a goroutine, and runs many goroutines on a small number of threads.</p>
+
+  <h2>a goroutine is a small struct and a small stack</h2>
+  <p>Inside the runtime a goroutine is a struct, usually called <code>g</code>. It holds the things needed to pause the work and resume it later: where its stack is, the saved stack pointer and program counter, and its current status (runnable, running, waiting, and so on). It does not hold a thread.</p>
+  <p>The stack is the interesting part. It starts at 2 KB. Every function begins with a tiny check that asks whether there is enough stack left for this call. When there is not, the runtime allocates a stack twice the size, copies the old one across, fixes up the pointers into it, and carries on. The stack can grow like this up to 1 GB on a 64-bit system, and the garbage collector shrinks stacks that are mostly unused. Since Go 1.19 the starting size is not even always 2 KB, because the runtime adapts it to what your goroutines actually use.</p>
+
+  <figure>
+    <div class="stacks">
+      <svg viewBox="-12 -12 346 346" role="img" aria-labelledby="f1t f1d">
+        <title id="f1t">One thread stack divided into 4,096 goroutine stacks</title>
+        <desc id="f1d">A square representing 8 megabytes, filled with a 64 by 64 grid of small squares. Each small square is one 2 kilobyte goroutine stack. The top left square is highlighted.</desc>
+        <defs>
+          <pattern id="cells" width="5" height="5" patternUnits="userSpaceOnUse">
+            <rect class="cell" x="0.5" y="0.5" width="4" height="4"/>
+          </pattern>
+        </defs>
+        <rect class="frame" x="0.75" y="0.75" width="320.5" height="320.5"/>
+        <rect x="1" y="1" width="320" height="320" fill="url(#cells)"/>
+        <rect class="cell1" x="1.5" y="1.5" width="4" height="4"/>
+        <circle class="ring" cx="3.5" cy="3.5" r="9"/>
+      </svg>
+      <ul>
+        <li><b>The whole square</b> is the 8 MB a typical Linux thread reserves for its stack.</li>
+        <li><b>Each small square</b> is a 2 KB goroutine stack.</li>
+        <li><b>The circled orange one</b> in the corner is a single goroutine.</li>
+        <li>There are 64 &times; 64 = 4,096 of them in the square.</li>
+      </ul>
+    </div>
+    <figcaption>Drawn to scale, using the 8 MB Linux default and the 2 KB starting stack.</figcaption>
+  </figure>
+
+  <p>Here is a program that starts 100,000 goroutines, parks them all on a channel, and asks the runtime how much stack they are using:</p>
+<pre tabindex="0"><code>package main
+
+import (
+	"fmt"
+	"runtime"
+	"sync"
+)
+
+func main() {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&amp;before)
+
+	const n = 100_000
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	wg.Add(n)
+	for i := 0; i &lt; n; i++ {
+		go func() {
+			defer wg.Done()
+			&lt;-stop
+		}()
+	}
+
+	runtime.Gosched()
+	runtime.ReadMemStats(&amp;after)
+	fmt.Println("goroutines:", runtime.NumGoroutine())
+	fmt.Printf("stack in use: %.0f MB\n", float64(after.StackInuse-before.StackInuse)/1e6)
+	fmt.Printf("per goroutine: %d bytes\n", (after.StackInuse-before.StackInuse)/n)
+	fmt.Printf("total sys: %.0f MB\n", float64(after.Sys-before.Sys)/1e6)
+	close(stop)
+	wg.Wait()
+}</code></pre>
+  <p>On my machine it printed:</p>
+<pre tabindex="0"><code>goroutines: 100001
+stack in use: 205 MB
+per goroutine: 2049 bytes
+total sys: 276 MB</code></pre>
+  <p>About 2 KB each, 205 MB of stack for 100,000 of them. The 100,001 is the 100,000 plus <code>main</code>. The 276 MB is everything the process asked the OS for, which also covers the <code>g</code> structs and other bookkeeping. So the claim is real, and also not free. A million of these would be a couple of gigabytes.</p>
+
+  <h2>G, M and P</h2>
+  <p>The scheduler is easier to follow once you have three names straight. They come from the runtime source, and they are one letter each:</p>
+  <ul>
+    <li><b>G</b> is a goroutine.</li>
+    <li><b>M</b> is a machine, which means an OS thread. It does the actual running.</li>
+    <li><b>P</b> is a processor, which is a scheduling context. It is not a CPU. It is a token that says "this thread is allowed to run Go code right now", and it carries the run queue and some per-P memory caches with it.</li>
+  </ul>
+  <p>An M has to hold a P to run Go code. The number of Ps is <code>GOMAXPROCS</code>, which defaults to the number of CPU cores. So with 12 cores you have 12 Ps, and at most 12 goroutines executing Go code at the same instant. Everything else is waiting its turn.</p>
+
+  <figure>
+    <div class="scroll" tabindex="0" role="group" aria-label="Diagram of the G, M and P model, scrollable">
+      <svg viewBox="0 0 720 400" role="img" aria-labelledby="f2t f2d">
+        <title id="f2t">The G, M and P model</title>
+        <desc id="f2d">A global run queue feeds three Ps. Each P has a local run queue and a runnext slot. Each P is attached to one M, which is an OS thread running the current G. The threads sit on top of CPU cores.</desc>
+
+        <rect class="frame" x="200" y="8" width="320" height="64"/>
+        <text class="tm" x="216" y="28">global run queue</text>
+        <rect class="chip" x="216" y="40" width="48" height="22"/><text class="tc" x="240" y="55" text-anchor="middle">G9</text>
+        <rect class="chip" x="272" y="40" width="48" height="22"/><text class="tc" x="296" y="55" text-anchor="middle">G10</text>
+        <rect class="chip" x="328" y="40" width="48" height="22"/><text class="tc" x="352" y="55" text-anchor="middle">G11</text>
+
+        <path class="line dash" d="M300 72 L125 108"/>
+        <path class="line dash" d="M360 72 L360 108"/>
+        <path class="line dash" d="M420 72 L595 108"/>
+
+        <g>
+          <rect class="frame" x="20" y="108" width="210" height="130"/>
+          <text class="tb" x="34" y="130">P0</text>
+          <text class="tm" x="34" y="150">local queue</text>
+          <rect class="chip" x="34" y="156" width="44" height="22"/><text class="tc" x="56" y="171" text-anchor="middle">G2</text>
+          <rect class="chip" x="86" y="156" width="44" height="22"/><text class="tc" x="108" y="171" text-anchor="middle">G3</text>
+          <text class="tm" x="34" y="200">runnext</text>
+          <rect class="chip" x="34" y="206" width="44" height="22"/><text class="tc" x="56" y="221" text-anchor="middle">G4</text>
+        </g>
+        <g>
+          <rect class="frame" x="255" y="108" width="210" height="130"/>
+          <text class="tb" x="269" y="130">P1</text>
+          <text class="tm" x="269" y="150">local queue</text>
+          <rect class="chip" x="269" y="156" width="44" height="22"/><text class="tc" x="291" y="171" text-anchor="middle">G6</text>
+          <text class="tm" x="269" y="200">runnext</text>
+          <text class="tm" x="269" y="221">empty</text>
+        </g>
+        <g>
+          <rect class="frame" x="490" y="108" width="210" height="130"/>
+          <text class="tb" x="504" y="130">P2</text>
+          <text class="tm" x="504" y="150">local queue</text>
+          <text class="tm" x="504" y="171">empty</text>
+          <text class="tm" x="504" y="200">runnext</text>
+          <text class="tm" x="504" y="221">empty</text>
+        </g>
+
+        <path class="line" d="M125 238 L125 270"/>
+        <path class="line" d="M360 238 L360 270"/>
+        <path class="line" d="M595 238 L595 270"/>
+        <text class="tm" x="133" y="259">holds</text>
+        <text class="tm" x="368" y="259">holds</text>
+        <text class="tm" x="603" y="259">holds</text>
+
+        <rect class="frame" x="20" y="270" width="210" height="52"/>
+        <text class="tb" x="34" y="292">M0</text><text class="tm" x="66" y="292">OS thread</text>
+        <rect class="chip hot" x="34" y="298" width="64" height="18"/><text class="tc hot" x="66" y="311" text-anchor="middle">runs G1</text>
+        <rect class="frame" x="255" y="270" width="210" height="52"/>
+        <text class="tb" x="269" y="292">M1</text><text class="tm" x="301" y="292">OS thread</text>
+        <rect class="chip hot" x="269" y="298" width="64" height="18"/><text class="tc hot" x="301" y="311" text-anchor="middle">runs G5</text>
+        <rect class="frame" x="490" y="270" width="210" height="52"/>
+        <text class="tb" x="504" y="292">M2</text><text class="tm" x="536" y="292">OS thread</text>
+        <text class="tm" x="504" y="311">idle, looking for work</text>
+
+        <path class="line" d="M125 322 L125 348"/>
+        <path class="line" d="M360 322 L360 348"/>
+        <path class="line" d="M595 322 L595 348"/>
+        <rect class="frame dash" x="20" y="348" width="680" height="40"/>
+        <text class="t" x="360" y="373" text-anchor="middle">the kernel schedules the threads onto CPU cores</text>
+      </svg>
+    </div>
+    <figcaption>One snapshot with 3 Ps. G1 and G5 are running. Dashed lines are goroutines moving from the global queue to a P.</figcaption>
+  </figure>
+
+  <p>Why have Ps at all, when you could just have goroutines and threads? Mostly so the run queues and caches belong to a P instead of one shared structure behind one lock. And when a thread gets stuck in the kernel, its P can be handed to a different thread, which the next sections show.</p>
+  <p>Each P keeps its own local run queue, plus a <code>runnext</code> slot for the one goroutine that should run next. There is also a global run queue for everything else. When a P needs work it looks in roughly this order: its own <code>runnext</code> and queue, then the global queue, then the network poller, and finally it steals from another P. Every 61st time around it checks the global queue first, so goroutines parked there cannot starve.</p>
+
+  <h2>watch it run</h2>
+  <p>Pick a scenario, then press <b>Step</b> to advance one tick, or <b>Play</b> to let it run. One tick is a unit of time, call it a millisecond. A running goroutine uses up one tick of its work per tick. The log underneath explains what the scheduler just did, newest line on top.</p>
+  <p>Chips show the goroutine number and what kind of goroutine it is. <b>cpu</b> just computes and finishes. <b>chan</b> computes, then blocks waiting on a channel, then computes again. <b>syscall</b> computes, then makes a blocking system call, then computes again. <b>loop</b> computes for a long time without ever yielding.</p>
+
+  <div class="sim" id="sim">
+    <noscript><p>This simulator needs JavaScript. The sections below describe each scenario in words.</p></noscript>
+    <div class="bar" role="group" aria-label="Scenario">
+      <button type="button" data-scn="steal" aria-pressed="true">work stealing</button>
+      <button type="button" data-scn="chan" aria-pressed="false">channel block</button>
+      <button type="button" data-scn="sys" aria-pressed="false">blocking syscall</button>
+      <button type="button" data-scn="spin" aria-pressed="false">preemption</button>
+    </div>
+    <div class="bar">
+      <button type="button" id="step">Step</button>
+      <button type="button" id="play" aria-pressed="false">Play</button>
+      <button type="button" id="reset">Reset</button>
+      <span class="sp"></span>
+      <label for="kind" class="muted">go func() as</label>
+      <select id="kind">
+        <option value="cpu">cpu</option>
+        <option value="chan">chan</option>
+        <option value="sys">syscall</option>
+        <option value="spin">loop</option>
+      </select>
+      <button type="button" id="spawn">go</button>
+    </div>
+    <p class="status" id="status"></p>
+    <div id="board" role="group" aria-label="Scheduler state"></div>
+    <ol id="log" aria-live="polite" aria-label="Scheduler log"></ol>
+  </div>
+
+  <p class="muted">The simulator simplifies things. Every goroutine is created on P0, ticks are all the same length, it steals from the busiest P instead of a random one, and a stuck syscall hands over its P immediately instead of after a short delay. It leaves out the network poller and the every-61st-tick rule. The shape of the behavior is right, the timing is not.</p>
+
+  <h2>starting one</h2>
+  <p>When you write <code>go f()</code>, the runtime takes a <code>g</code> (reusing a finished one when it can), gives it a small stack, and puts it in the <code>runnext</code> slot of the P you are on. If something was already in <code>runnext</code>, that goroutine gets bumped to the back of the local queue. That is why, in the first scenario, the goroutine created last is the one that runs first.</p>
+  <p>The reason for <code>runnext</code> is communication. If goroutine A creates B, or wakes B by sending on a channel, the two probably share data that is still warm in the CPU cache, and A is likely to block soon. Running B straight away is usually the cheapest thing to do.</p>
+
+  <h2>blocking on a channel</h2>
+  <p>Try the <b>channel block</b> scenario. When a <b>chan</b> goroutine reaches its wait, it does not hold a thread hostage. The runtime marks the goroutine as waiting, files it in the channel's wait list, and the thread goes straight back to the scheduler to pick something else. No kernel is involved. When the other side finally sends, the waiting goroutine is marked runnable and goes into a <code>runnext</code> slot, normally on the P that woke it.</p>
+  <p>The same thing happens for mutexes, <code>time.Sleep</code>, <code>select</code> and <code>WaitGroup.Wait</code>. Blocking a goroutine is cheap, which is the whole reason the style of one goroutine per task works.</p>
+  <p>Network I/O follows the same idea with some help. Sockets are set to non-blocking, and the runtime asks the OS (epoll on Linux, kqueue on macOS) to say when they are ready. A goroutine that reads from a socket with no data is just parked until the poller reports data. No thread sits blocked inside <code>read</code>.</p>
+
+  <h2>blocking in a syscall</h2>
+  <p>Some calls cannot be parked this way. Regular file reads and writes, and most cgo calls, block the whole thread inside the kernel, and the goroutine is stuck on it. Try the <b>blocking syscall</b> scenario, which runs on a single P.</p>
+  <p>The thread, M0, is stuck with its goroutine, so it cannot keep the P. A background thread in the runtime called <code>sysmon</code> notices a P that has been sitting in a syscall and hands it to another thread, creating a new one if none is idle. That is why you will often see more OS threads in a Go process than <code>GOMAXPROCS</code>. When the syscall finally returns, the goroutine needs a P again. It tries to grab an idle one, and if there is none it goes onto the global queue while its thread goes to sleep.</p>
+
+  <h2>work stealing</h2>
+  <p>In the <b>work stealing</b> scenario everything starts on P0, but there are three Ps. P1 and P2 begin with nothing local and nothing global, so they go looking. A P that steals takes about half of another P's local queue, runs one of those goroutines, and keeps the rest. Work spreads out without a central dispatcher, and the lock-free local queues stay cheap in the common case where nobody needs to steal.</p>
+
+  <h2>preemption</h2>
+  <p>In the <b>preemption</b> scenario one goroutine does a very long computation and never blocks. After 10 ticks the scheduler takes it off the P and puts it on the global queue, so the short goroutines are not stuck behind it. Real Go uses roughly 10 ms for this.</p>
+  <p>This got better in Go 1.14. Before that, preemption was cooperative: it could only happen at function calls, so a tight loop with no calls could hold a P forever. Since 1.14 the runtime can interrupt a goroutine with a signal. You can see the difference with this program, which has one P and a goroutine that never yields:</p>
+<pre tabindex="0"><code>package main
+
+import (
+	"fmt"
+	"runtime"
+	"time"
+)
+
+func main() {
+	runtime.GOMAXPROCS(1)
+
+	go func() {
+		for {
+		}
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	fmt.Println("main got the only P back")
+}</code></pre>
+  <p>On a current Go it prints the message after about 100 ms. On Go 1.13 or earlier, this program could hang, because the spinning goroutine never reached a point where it could be stopped.</p>
+
+  <h2>looking at the real scheduler</h2>
+  <p>The runtime will tell you what it is doing. Set <code>GODEBUG=schedtrace</code> with an interval in milliseconds and it prints a line per interval. I ran 8 goroutines that each spin the CPU for 1.5 seconds:</p>
+<pre tabindex="0"><code>GODEBUG=schedtrace=500 ./spin
+
+SCHED 0ms: gomaxprocs=12 idleprocs=10 threads=3 spinningthreads=1 needspinning=0 idlethreads=0 runqueue=0 [ 0 0 0 0 0 0 0 0 0 0 0 0 ] schedticks=[ 0 0 0 0 0 0 0 0 0 0 0 0 ]
+SCHED 511ms: gomaxprocs=12 idleprocs=4 threads=11 spinningthreads=0 needspinning=0 idlethreads=2 runqueue=0 [ 0 0 0 0 0 0 0 0 0 0 0 0 ] schedticks=[ 23 0 0 11 15 22 22 11 7 22 23 25 ]</code></pre>
+  <p>Reading the second line: 12 Ps (<code>gomaxprocs</code>), 4 of them idle, so 8 busy, one per spinning goroutine. 11 OS threads exist. <code>runqueue</code> is the global queue, and the bracketed list is each P's local queue length. All zero, because there is a P for every goroutine. <code>schedticks</code> counts how many times each P has gone back to the scheduler.</p>
+  <p>Two other tools are worth knowing. <code>go tool trace</code> shows a timeline of goroutines on Ps. And <code>runtime.NumGoroutine()</code>, or the goroutine profile at <code>/debug/pprof/goroutine</code>, tells you how many exist and where each one is stuck.</p>
+
+  <h2>where goroutines bite</h2>
+  <ul>
+    <li><b>A goroutine that blocks forever is never collected.</b> The garbage collector does not clean up a goroutine just because nobody can reach it any more. This leaks 1,000 of them:
+<pre tabindex="0"><code>func leak() {
+	ch := make(chan int)
+	go func() { ch &lt;- 1 }() // nobody ever receives
+}</code></pre>
+    Calling <code>leak()</code> 1,000 times printed <code>goroutines: 1001</code>. Giving the channel a buffer, <code>make(chan int, 1)</code>, lets the send finish, and the count drops to 1. In real code the usual fix is a <code>context</code> or a channel that tells the goroutine when to stop.</li>
+    <li><b>Cheap is not free.</b> 100,000 parked goroutines cost about 200 MB. Goroutines that hold connections, buffers or files cost whatever those cost. Put a limit on how many you start. A buffered channel used as a semaphore works, and so does <code>SetLimit</code> on <code>errgroup</code> from <code>golang.org/x/sync</code>.</li>
+    <li><b>Shared memory still needs protecting.</b> Two goroutines writing the same variable is a data race, however light they are. Run your tests with <code>go test -race</code>.</li>
+    <li><b>The program does not wait for them.</b> When <code>main</code> returns, they are gone. Use a <code>WaitGroup</code> or a channel.</li>
+  </ul>
+
+  <h2>things to poke at</h2>
+  <ul>
+    <li>In the simulator, spawn a few <b>loop</b> goroutines on the preemption scenario and watch how the global queue builds up.</li>
+    <li>Run the 100,000 goroutine program with 1,000,000 and see how the memory scales.</li>
+    <li>Run any of your own programs with <code>GODEBUG=schedtrace=1000</code> and check whether the local queues ever fill up.</li>
+    <li>Read the long comment at the top of <code>src/runtime/proc.go</code> in the Go source. It is the scheduler's own explanation of the design.</li>
+  </ul>
+</main>
+
+<script>
+(function () {
+  var SLICE = 10;
+  var KIND_LABEL = { cpu: "cpu", chan: "chan", sys: "syscall", spin: "loop" };
+  var PROGRAMS = {
+    cpu:  [{ k: "run", n: 4 }],
+    chan: [{ k: "run", n: 2 }, { k: "wait", n: 5 }, { k: "run", n: 2 }],
+    sys:  [{ k: "run", n: 1 }, { k: "sys", n: 6 }, { k: "run", n: 1 }],
+    spin: [{ k: "run", n: 25 }]
+  };
+  var SCENARIOS = {
+    steal: { label: "work stealing", procs: 3, spawn: ["cpu", "cpu", "cpu", "cpu", "cpu", "cpu"] },
+    chan:  { label: "channel block", procs: 2, spawn: ["chan", "cpu", "chan", "cpu", "chan"] },
+    sys:   { label: "blocking syscall", procs: 1, spawn: ["sys", "cpu", "cpu", "cpu"] },
+    spin:  { label: "preemption", procs: 1, spawn: ["spin", "cpu", "cpu", "cpu"] }
+  };
+
+  var s, scenarioKey = "steal", timer = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function say(msg) {
+    s.log.unshift({ t: s.tick, msg: msg });
+    if (s.log.length > 14) s.log.pop();
+  }
+
+  function newG(kind) {
+    var segs = PROGRAMS[kind].map(function (x) { return { k: x.k, n: x.n }; });
+    return { id: s.nextG++, kind: kind, segs: segs, i: 0, left: segs[0].n, lastP: 0, m: 0 };
+  }
+
+  function spawn(kind) {
+    var g = newG(kind), p = s.ps[0], bumped = null;
+    if (p.next) { bumped = p.next; p.q.push(bumped); }
+    p.next = g;
+    s.total++;
+    return { g: g, bumped: bumped };
+  }
+
+  function init(key) {
+    stop();
+    scenarioKey = key;
+    var sc = SCENARIOS[key], i;
+    s = { tick: 0, nextG: 1, nextM: sc.procs, ps: [], global: [], parked: [], sys: [], log: [], done: 0, total: 0 };
+    for (i = 0; i < sc.procs; i++) s.ps.push({ id: i, m: i, run: null, next: null, q: [], slice: 0, idleSaid: false });
+    sc.spawn.forEach(function (k) { spawn(k); });
+    say(sc.spawn.length + " go statements ran on P0. The last one sits in runnext, the others wait in P0's local queue.");
+    render();
+  }
+
+  function isIdle(p) { return !p.run && !p.next && p.q.length === 0; }
+
+  function schedule(p) {
+    var g, from;
+    if (p.next) { g = p.next; p.next = null; from = "picks G" + g.id + " from runnext."; }
+    else if (p.q.length) { g = p.q.shift(); from = "picks G" + g.id + " from its local queue."; }
+    else if (s.global.length) { g = s.global.shift(); from = "has nothing local, so it takes G" + g.id + " from the global queue."; }
+    else {
+      var victim = null;
+      s.ps.forEach(function (o) {
+        if (o !== p && o.q.length > 0 && (!victim || o.q.length > victim.q.length)) victim = o;
+      });
+      if (victim) {
+        var take = Math.ceil(victim.q.length / 2);
+        var stolen = victim.q.splice(0, take);
+        g = stolen.pop();
+        stolen.forEach(function (x) { p.q.push(x); });
+        from = "has nothing anywhere, so it steals " + take + " from P" + victim.id + "'s queue, runs G" + g.id + (stolen.length ? " and keeps the rest." : ".");
+      }
+    }
+    if (!g) {
+      if (!p.idleSaid) { say("P" + p.id + " finds nothing to run and goes idle."); p.idleSaid = true; }
+      return;
+    }
+    p.idleSaid = false;
+    p.run = g; p.slice = 0; g.lastP = p.id;
+    say("P" + p.id + " " + from);
+  }
+
+  function runTick(p) {
+    var g = p.run;
+    g.left--; p.slice++;
+    if (g.left === 0) {
+      g.i++;
+      if (g.i >= g.segs.length) {
+        s.done++; p.run = null;
+        say("G" + g.id + " finishes. P" + p.id + " is free.");
+        return;
+      }
+      var seg = g.segs[g.i];
+      g.left = seg.n;
+      if (seg.k === "wait") {
+        s.parked.push(g); p.run = null;
+        say("G" + g.id + " blocks on a channel. It is parked, and thread M" + p.m + " goes back to the scheduler for something else.");
+      } else if (seg.k === "sys") {
+        s.sys.push(g); g.m = p.m; p.run = null;
+        var old = p.m; p.m = s.nextM++;
+        say("G" + g.id + " enters a blocking syscall. Thread M" + old + " is stuck inside it, so P" + p.id + " moves to a new thread, M" + p.m + ".");
+      }
+    } else if (p.slice >= SLICE) {
+      s.global.push(g); p.run = null;
+      say("G" + g.id + " has run " + SLICE + " ticks without yielding. It is preempted and goes to the global queue.");
+    }
+  }
+
+  function wake(g) {
+    g.i++; g.left = g.segs[g.i].n;
+    var p = s.ps[g.lastP];
+    if (p.next) p.q.push(p.next);
+    p.next = g;
+    say("G" + g.id + " is ready again, its channel got a value. It goes into runnext on P" + p.id + ".");
+  }
+
+  function exitSyscall(g) {
+    g.i++; g.left = g.segs[g.i].n;
+    var idle = s.ps.filter(isIdle)[0];
+    if (idle) {
+      idle.m = g.m; idle.run = g; idle.slice = 0; idle.idleSaid = false; g.lastP = idle.id;
+      say("G" + g.id + " returns from its syscall, and thread M" + g.m + " takes the idle P" + idle.id + " to continue.");
+    } else {
+      s.global.push(g);
+      say("G" + g.id + " returns from its syscall. No P is free, so it goes to the global queue and thread M" + g.m + " goes to sleep.");
+    }
+  }
+
+  function finished() { return s.done === s.total; }
+
+  function step() {
+    if (finished()) return;
+    s.tick++;
+    var due = [];
+    s.parked = s.parked.filter(function (g) { if (--g.left === 0) { due.push(g); return false; } return true; });
+    due.forEach(wake);
+    due = [];
+    s.sys = s.sys.filter(function (g) { if (--g.left === 0) { due.push(g); return false; } return true; });
+    due.forEach(exitSyscall);
+    s.ps.forEach(function (p) {
+      if (!p.run) schedule(p);
+      if (p.run) runTick(p);
+    });
+    if (finished()) { say("Every goroutine has finished."); stop(); }
+    render();
+  }
+
+  function start() {
+    if (timer || finished()) return;
+    timer = setInterval(step, 700);
+    $("play").setAttribute("aria-pressed", "true");
+    $("play").textContent = "Pause";
+    $("log").setAttribute("aria-live", "off");
+  }
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null; }
+    var b = $("play");
+    if (b) { b.setAttribute("aria-pressed", "false"); b.textContent = "Play"; }
+    var l = $("log");
+    if (l) l.setAttribute("aria-live", "polite");
+  }
+
+  function chip(g, extra) {
+    return '<span class="g k-' + g.kind + '">G' + g.id + "<i>" + (extra || KIND_LABEL[g.kind]) + "</i></span>";
+  }
+  function chips(list, empty) {
+    return list.length ? list.map(function (g) { return chip(g); }).join("") : '<span class="empty">' + empty + "</span>";
+  }
+
+  function render() {
+    var html = '<div class="box"><span class="lbl">global queue</span>' + chips(s.global, "empty") + "</div>";
+    html += '<div class="ps" style="margin-top:0.6rem">';
+    s.ps.forEach(function (p) {
+      html += '<div class="box"><span class="lbl">P' + p.id + " on thread M" + p.m + "</span>" +
+        '<div class="row run">' + (p.run ? chip(p.run, "running") : '<span class="empty">idle</span>') + "</div>" +
+        '<div class="row"><span class="lbl" style="display:inline">runnext </span>' + (p.next ? chip(p.next) : '<span class="empty">empty</span>') + "</div>" +
+        '<div class="row"><span class="lbl" style="display:inline">queue </span>' + chips(p.q, "empty") + "</div></div>";
+    });
+    html += "</div>";
+    html += '<div class="two"><div class="box"><span class="lbl">parked, waiting on a channel</span>' +
+      (s.parked.length ? s.parked.map(function (g) { return chip(g, "wakes in " + g.left); }).join("") : '<span class="empty">none</span>') +
+      '</div><div class="box"><span class="lbl">stuck in a syscall, thread blocked</span>' +
+      (s.sys.length ? s.sys.map(function (g) { return chip(g, "M" + g.m + ", " + g.left + " left"); }).join("") : '<span class="empty">none</span>') +
+      "</div></div>";
+    $("board").innerHTML = html;
+
+    $("status").textContent = "tick " + s.tick + " · finished " + s.done + " of " + s.total + " · threads created " + s.nextM + " · " + SCENARIOS[scenarioKey].label;
+    $("log").innerHTML = s.log.map(function (e) {
+      return "<li><time>t" + e.t + "</time>" + e.msg + "</li>";
+    }).join("");
+    $("step").disabled = finished();
+    $("play").disabled = finished();
+  }
+
+  document.querySelectorAll("[data-scn]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll("[data-scn]").forEach(function (o) { o.setAttribute("aria-pressed", o === b ? "true" : "false"); });
+      init(b.getAttribute("data-scn"));
+    });
+  });
+  $("step").addEventListener("click", function () { stop(); step(); });
+  $("play").addEventListener("click", function () { if (timer) stop(); else start(); });
+  $("reset").addEventListener("click", function () { init(scenarioKey); });
+  $("spawn").addEventListener("click", function () {
+    var r = spawn($("kind").value);
+    say("go func(): G" + r.g.id + " (" + KIND_LABEL[r.g.kind] + ") is created on P0 and put in runnext." + (r.bumped ? " G" + r.bumped.id + " was in runnext, so it moves to the queue." : ""));
+    render();
+  });
+
+  init("steal");
+})();
+</script>
+</body>
+</html>
