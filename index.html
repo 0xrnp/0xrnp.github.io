@@ -392,12 +392,12 @@
     return Math.round(s / 86400) + " d ago";
   }
   try {
-    fetch("https://api.github.com/users/0xrnp/events/public", { headers: { Accept: "application/vnd.github+json" } })
+    fetch("https://api.github.com/users/0xrnp/repos?sort=pushed&per_page=10", { headers: { Accept: "application/vnd.github+json" } })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
-      .then(function (events) {
-        var push = events.filter(function (ev) { return ev.type === "PushEvent"; })[0];
-        if (!push) return;
-        live.textContent = "last push: " + push.repo.name + ", " + ago(push.created_at);
+      .then(function (repos) {
+        var repo = repos.filter(function (r) { return !r.fork; })[0];
+        if (!repo) return;
+        live.textContent = "last push: " + repo.full_name + ", " + ago(repo.pushed_at);
         live.hidden = false;
       })
       .catch(function () {});
