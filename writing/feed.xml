@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Writing · 0xrnp</title>
+  <subtitle>Notes from production work and from reading how storage engines behave when things go wrong.</subtitle>
+  <link rel="self" type="application/atom+xml" href="https://0xrnp.github.io/writing/feed.xml"/>
+  <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/"/>
+  <id>https://0xrnp.github.io/writing/</id>
+  <updated>2026-11-13T00:00:00Z</updated>
+  <author>
+    <name>Rudra Narayan Panda</name>
+    <uri>https://0xrnp.github.io/</uri>
+  </author>
+  <entry>
+    <title>What a goroutine actually is</title>
+    <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/goroutines-explained/"/>
+    <id>https://0xrnp.github.io/writing/goroutines-explained/</id>
+    <updated>2026-11-13T00:00:00Z</updated>
+    <summary>Goroutines are not threads. How stacks, the G-M-P scheduler, blocking and preemption work, with a scheduler you can step through.</summary>
+  </entry>
+  <entry>
+    <title>Reading a MongoDB explain() in five minutes</title>
+    <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/reading-mongodb-explain/"/>
+    <id>https://0xrnp.github.io/writing/reading-mongodb-explain/</id>
+    <updated>2026-11-13T00:00:00Z</updated>
+    <summary>Three numbers in explain('executionStats') tell you whether a MongoDB query is healthy, and one index rule fixes most slow ones.</summary>
+  </entry>
+</feed>
