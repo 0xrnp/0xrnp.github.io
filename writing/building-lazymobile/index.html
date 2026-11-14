@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Wrapping the tools you already have · 0xrnp</title>
+<meta name="description" content="How lazymobile follows an Android app across restarts, finds a release iOS app's output, and survives simctl formats that keep changing.">
+<link rel="canonical" href="https://0xrnp.github.io/writing/building-lazymobile/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Wrapping the tools you already have">
+<meta property="og:description" content="How lazymobile follows an Android app across restarts, finds a release iOS app's output, and survives simctl formats that keep changing.">
+<meta property="og:url" content="https://0xrnp.github.io/writing/building-lazymobile/">
+<meta property="og:image" content="https://0xrnp.github.io/writing/building-lazymobile/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Wrapping the tools you already have: lazymobile is one Go binary around xcrun, adb, emulator and eas.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://0xrnp.github.io/writing/building-lazymobile/og.png">
+<link rel="preload" href="/fonts/MapleMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+  :root {
+    --mono: "Maple Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #f4f2ee; --ink: #22252b; --muted: #595e68; --accent: #a8431a; --panel: #e9e6e0; --add: #19672f; --del: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171b; --ink: #dfe2e7; --muted: #8b919c; --accent: #f0905a; --panel: #1d2026; --add: #6fd08c; --del: #f07a72; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--mono); }
+  main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
+  h1 { font: 400 clamp(2rem, 7vw, 3rem)/1.1 Georgia, "Times New Roman", serif; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+  h2 { font-size: 1rem; font-weight: 700; color: var(--accent); margin: 2.5rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+  pre { background: var(--panel); padding: 1rem 1.25rem; overflow-x: auto; font: inherit; font-size: 0.85rem; margin: 0 0 1rem; }
+  code { font: inherit; }
+  p code, li code { background: var(--panel); padding: 0.05rem 0.35rem; font-size: 0.88em; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin: 0 0 1rem; display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; vertical-align: top; }
+  th { color: var(--accent); border-bottom: 1px solid var(--muted); }
+  ul, ol { margin: 0 0 1rem; padding-left: 1.25rem; }
+  li { margin-bottom: 0.3rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+  .good { color: var(--add); }
+  .bad { color: var(--del); }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--bg); padding: 0.4rem 0.8rem; }
+  .skip:focus { left: 0.5rem; top: 0.5rem; }
+  pre:focus-visible, table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<main id="main">
+  <p><a href="/writing/">&larr; writing</a></p>
+
+  <h1>Wrapping the tools you already have</h1>
+  <p class="muted">Rudra Narayan Panda &middot; <time datetime="2026-11-14">14 Nov 2026</time></p>
+
+  <p><a href="https://github.com/0xrnp/lazymobile">lazymobile</a> is a terminal dashboard for mobile development: iOS simulators, Android emulators, connected phones, their logs, and Expo builds in one screen. It is one Go binary that calls <code>xcrun</code>, <code>adb</code>, <code>emulator</code> and <code>eas</code>. Its device logic started in <a href="https://github.com/0xrnp/devices.nvim">devices.nvim</a>, the same idea as a Neovim plugin, and was ported to Go.</p>
+  <p>Wrapping existing tools sounds easy. The work is in what those tools do not promise: stable output, one process id per app, and a place where a release build's <code>print()</code> goes. Here are the parts that took thought.</p>
+
+  <h2>the output changes under you</h2>
+  <p>lazymobile does not link to any Apple or Android library. It runs the tool and parses what comes back, so the parser is the contract. <code>simctl</code> alone has two generations of output. Modern versions report <code>isAvailable</code> as a boolean. Older ones report an <code>availability</code> string. Runtime keys changed too, from names like <code>iOS 12.1</code> to <code>SimRuntime.iOS-18-2</code>. Both are read:</p>
+<pre tabindex="0"><code>func available(isAvailable *bool, availability *string) bool {
+	if isAvailable != nil {
+		return *isAvailable
+	}
+	return availability == nil || *availability == "(available)"
+}</code></pre>
+  <p><code>devicectl</code>, which lists physical iPhones, moved its fields under <code>properties</code> in Xcode 27 and reports versions as an object with a <code>stringValue</code>. The parser reads the new layout first and falls back to the old one. One more rule: each device entry is decoded on its own, so one malformed entry cannot hide the rest of the list.</p>
+
+  <h2>following an Android app across restarts</h2>
+  <p><code>adb logcat</code> prints a process id on every line. Filter on one pid and the log goes quiet the moment the app restarts, because the new process has a new pid. lazymobile keeps a set of pids for the package instead, and fills it from two places:</p>
+  <ul>
+    <li><code>adb shell pidof &lt;package&gt;</code>, asked once before streaming starts and then every 2 seconds. Asking first means the earlier lines of an app that is already running are not dropped for arriving before its pid is known.</li>
+    <li>The <code>Start proc &lt;pid&gt;:&lt;package&gt;</code> line that Android logs when it launches the process, which the filter reads from the stream itself.</li>
+  </ul>
+<pre tabindex="0"><code>func (f *AppFilter) Accept(line Line) bool {
+	if m := f.start.FindStringSubmatch(line.Text); m != nil {
+		f.pids[m[1]] = true
+		return true
+	}
+	if line.PID != "" && f.pids[line.PID] {
+		return true
+	}
+	return strings.Contains(line.Text, f.pkg)
+}</code></pre>
+  <p>The last line keeps anything that names the package, so crash reports and system messages about your app stay in view even when they come from another process.</p>
+
+  <h2>the release build that prints nothing</h2>
+  <p>On iOS, a release app's <code>print()</code> and <code>NSLog</code> output goes to its standard output, and only the tool that launched the app sees that. Open the system log for a release build and you will not find it. So alongside the system log, lazymobile offers to launch the app itself and show its output. On a simulator that is <code>simctl launch --console-pty</code>. A pseudo-terminal keeps the app's output line-buffered, so lines arrive as they are printed and not in a late burst. On a phone it is <code>devicectl device process launch --console</code>.</p>
+
+  <h2>treat the arguments as untrusted</h2>
+  <p>A dashboard that builds command lines from names on a screen needs rules about what reaches the shell.</p>
+  <ul>
+    <li><code>adb shell</code> joins its arguments into one command line for the device's shell, so an app id is checked against a plain pattern (letters, digits, dots, underscores, dashes) before it gets there. An iOS process name goes into a log predicate, so it gets the same check.</li>
+    <li>Erase, delete and wipe always ask first, and real phones are never booted, erased or deleted.</li>
+    <li>The Expo builds pane does not run <code>eas</code> until you press enter in it, because <code>eas</code> runs your project's own configuration code and uses your Expo login. Starting a build shows the exact command and asks first, and a profile with "prod" in its name must be typed out.</li>
+    <li>Log lines are stripped of terminal control sequences before they are drawn, since a log line should not be able to move your cursor. Saved logs are readable only by you, because logs can hold tokens and personal data.</li>
+  </ul>
+
+  <h2>what I have and have not tested</h2>
+  <p>The README keeps a status table, and I would rather say it here than let you find out. Tested on real hardware or real tools:</p>
+  <ul>
+    <li>iOS simulators on Xcode 27.2: list, boot, shut down, install an app and both kinds of logs, with a real React Native app.</li>
+    <li>Android emulator boot, shut down and logcat, and a real Android phone.</li>
+    <li>An iPhone, listed over USB.</li>
+    <li>The Expo builds pane: listing, details, and downloading and installing builds, with eas-cli 24.7 and a real Expo project.</li>
+  </ul>
+  <p>Tested with fake tools only:</p>
+  <ul>
+    <li>An iPhone's logs and <code>idevicesyslog</code>.</li>
+    <li>Starting and cancelling Expo builds.</li>
+  </ul>
+  <p>Fake tools are how most of the suite runs in CI, on Ubuntu and macOS. They prove the parsing and the flow, not that a real device agrees.</p>
+
+  <h2>try it</h2>
+<pre tabindex="0"><code>brew install 0xrnp/tap/lazymobile
+lazymobile doctor</code></pre>
+  <p><code>lazymobile doctor</code> says what is missing and how to install it. If something fails, the issue form asks for its output. The Neovim version is <a href="https://github.com/0xrnp/devices.nvim">devices.nvim</a>.</p>
+</main>
+</body>
+</html>
