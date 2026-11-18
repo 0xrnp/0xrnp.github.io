@@ -5,11 +5,25 @@
   <link rel="self" type="application/atom+xml" href="https://0xrnp.github.io/writing/feed.xml"/>
   <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/"/>
   <id>https://0xrnp.github.io/writing/</id>
-  <updated>2026-11-14T00:00:00Z</updated>
+  <updated>2026-11-19T00:00:00Z</updated>
   <author>
     <name>Rudra Narayan Panda</name>
     <uri>https://0xrnp.github.io/</uri>
   </author>
+  <entry>
+    <title>How a request reaches a Kubernetes pod</title>
+    <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/kubernetes-networking/"/>
+    <id>https://0xrnp.github.io/writing/kubernetes-networking/</id>
+    <updated>2026-11-19T00:00:00Z</updated>
+    <summary>Pod IPs, Services, kube-proxy, and where Ingress and Gateway API fit, including what changed in 2026: Ingress NGINX is retired and the IPVS backend is on its way out.</summary>
+  </entry>
+  <entry>
+    <title>What happens when you run kubectl apply</title>
+    <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/kubernetes-architecture/"/>
+    <id>https://0xrnp.github.io/writing/kubernetes-architecture/</id>
+    <updated>2026-11-19T00:00:00Z</updated>
+    <summary>Follow one Deployment from kubectl apply to a running container: which component does each step, and where it breaks.</summary>
+  </entry>
   <entry>
     <title>Wrapping the tools you already have</title>
     <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/building-lazymobile/"/>

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>How a request reaches a Kubernetes pod · 0xrnp</title>
+<meta name="description" content="Pod IPs, Services, kube-proxy, and where Ingress and Gateway API fit. Includes what changed in 2026: Ingress NGINX is retired and IPVS is on its way out.">
+<link rel="canonical" href="https://0xrnp.github.io/writing/kubernetes-networking/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How a request reaches a Kubernetes pod">
+<meta property="og:description" content="Pod IPs, Services, kube-proxy, and where Ingress and Gateway API fit. Includes what changed in 2026: Ingress NGINX is retired and IPVS is on its way out.">
+<meta property="og:url" content="https://0xrnp.github.io/writing/kubernetes-networking/">
+<meta property="og:image" content="https://0xrnp.github.io/writing/kubernetes-networking/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="How a request reaches a Kubernetes pod: Gateway, Service, kube-proxy and the pod, and what changed in 2026.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://0xrnp.github.io/writing/kubernetes-networking/og.png">
+<link rel="preload" href="/fonts/MapleMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+  :root {
+    --mono: "Maple Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #f4f2ee; --ink: #22252b; --muted: #595e68; --accent: #a8431a; --panel: #e9e6e0; --add: #19672f; --del: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171b; --ink: #dfe2e7; --muted: #8b919c; --accent: #f0905a; --panel: #1d2026; --add: #6fd08c; --del: #f07a72; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--mono); }
+  main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
+  h1 { font: 400 clamp(2rem, 7vw, 3rem)/1.1 Georgia, "Times New Roman", serif; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+  h2 { font-size: 1rem; font-weight: 700; color: var(--accent); margin: 2.5rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+  pre { background: var(--panel); padding: 1rem 1.25rem; overflow-x: auto; font: inherit; font-size: 0.85rem; margin: 0 0 1rem; }
+  pre, code { font-variant-ligatures: none; }
+  code { font: inherit; font-variant-ligatures: none; }
+  p code, li code, td code { background: var(--panel); padding: 0.05rem 0.35rem; font-size: 0.88em; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin: 0 0 1rem; display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; vertical-align: top; }
+  th { color: var(--accent); border-bottom: 1px solid var(--muted); }
+  ul, ol { margin: 0 0 1rem; padding-left: 1.25rem; }
+  li { margin-bottom: 0.3rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+  figure { margin: 0 0 1.5rem; }
+  figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+  .diagram { overflow-x: auto; background: var(--panel); padding: 0.75rem; }
+  .diagram:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .diagram svg { display: block; width: 100%; min-width: 600px; height: auto; }
+  svg text { font-family: var(--mono); font-size: 13px; fill: var(--ink); }
+  svg .m { text-anchor: middle; }
+  svg .b { font-weight: 700; }
+  svg .dim { font-size: 11.5px; fill: var(--muted); }
+  svg .tag { font-weight: 700; fill: var(--accent); }
+  svg .box { fill: var(--bg); stroke: var(--muted); stroke-width: 1.2; }
+  svg .hub { fill: var(--bg); stroke: var(--accent); stroke-width: 1.8; }
+  svg .virt { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; }
+  svg .vbox { fill: var(--bg); stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 5 4; }
+  svg .ok { fill: var(--bg); stroke: var(--add); stroke-width: 1.8; }
+  svg .bad { fill: var(--bg); stroke: var(--del); stroke-width: 1.8; stroke-dasharray: 5 4; }
+  svg .ar { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+  svg .badge { fill: var(--accent); }
+  svg .badgeText { fill: var(--bg); font-size: 12px; font-weight: 700; text-anchor: middle; }
+  svg .mk { fill: var(--accent); }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--bg); padding: 0.4rem 0.8rem; }
+  .skip:focus { left: 0.5rem; top: 0.5rem; }
+  pre:focus-visible, table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0 0L10 5L0 10z"/></marker>
+</defs></svg>
+<main id="main">
+  <p><a href="/writing/">&larr; writing</a></p>
+
+  <h1>How a request reaches a Kubernetes pod</h1>
+  <p class="muted">Rudra Narayan Panda &middot; <time datetime="2026-11-19">19 Nov 2026</time></p>
+
+  <p>Pods come and go, and their IP addresses go with them. Kubernetes networking is the set of pieces that give clients a stable address anyway. This is the second of two posts. The <a href="/writing/kubernetes-architecture/">first</a> covers what runs where. This one follows a request in, and covers two changes in 2026 that older guides miss.</p>
+
+  <h2>every pod gets an IP</h2>
+  <p>The Kubernetes network model says each pod has its own IP address, and any pod can reach any other pod without NAT. Kubernetes only states the rule. A network plugin (CNI), such as Calico, Cilium or Flannel, does the wiring, and the container runtime calls it to set up the pod's network when the pod starts.</p>
+
+  <h2>services give pods a stable address</h2>
+  <p>A Service has a virtual IP (the ClusterIP), a DNS name such as <code>web.default.svc.cluster.local</code>, and a label selector. The pods that match the selector are listed in EndpointSlices, each with a ready flag:</p>
+<pre tabindex="0"><code>kubectl get endpointslices -l kubernetes.io/service-name=web</code></pre>
+  <p>In iptables and nftables mode, the ClusterIP is not on any network interface. <b>kube-proxy</b> runs on every node, watches Services and EndpointSlices, and programs the node's packet filter so traffic to the ClusterIP is rewritten to the IP of one ready pod. Pods whose endpoint is not ready are skipped. Without that rewrite, the address leads nowhere. Some network plugins, Cilium for one, can replace kube-proxy and do this themselves.</p>
+
+  <figure>
+    <div class="diagram" tabindex="0">
+    <svg viewBox="0 0 640 345" role="img" aria-labelledby="fd-t fd-d">
+      <title id="fd-t">A Service in front of three pods</title>
+      <desc id="fd-d">A client pod sends traffic to the Service's virtual ClusterIP. kube-proxy's rules on the node rewrite it to the IP of one ready pod. The EndpointSlice lists all three pods with a ready flag, and kube-proxy reads it. kube-proxy skips the third pod because it is not ready.</desc>
+      <rect class="box" x="150" y="6" width="330" height="70"/>
+      <text class="m b" x="315" y="24">EndpointSlice web</text>
+      <text class="m dim" x="315" y="40">10.0.1.4   ready</text>
+      <text class="m dim" x="315" y="53">10.0.2.7   ready</text>
+      <text class="m dim" x="315" y="66">10.0.1.9   not ready</text>
+      <path class="ar" d="M395 76V146" marker-end="url(#ah)"/>
+      <text class="dim" x="387" y="112" text-anchor="end">read by kube-proxy</text>
+
+      <rect class="box" x="10" y="146" width="116" height="52"/>
+      <text class="m b" x="68" y="168">client pod</text>
+      <text class="m dim" x="68" y="186">10.0.3.8</text>
+      <rect class="vbox" x="156" y="146" width="146" height="52"/>
+      <text class="m b" x="229" y="168">Service web</text>
+      <text class="m dim" x="229" y="186">ClusterIP 10.96.0.12</text>
+      <rect class="hub" x="330" y="146" width="130" height="52"/>
+      <text class="m b" x="395" y="168">kube-proxy</text>
+      <text class="m dim" x="395" y="186">rewrites to a pod</text>
+      <path class="ar" d="M126 172H156" marker-end="url(#ah)"/>
+      <path class="ar" d="M302 172H330" marker-end="url(#ah)"/>
+
+      <rect class="ok" x="496" y="92" width="136" height="48"/>
+      <text class="m b" x="564" y="113">pod 10.0.1.4</text>
+      <text class="m dim" x="564" y="130">Ready</text>
+      <rect class="ok" x="496" y="172" width="136" height="48"/>
+      <text class="m b" x="564" y="193">pod 10.0.2.7</text>
+      <text class="m dim" x="564" y="210">Ready</text>
+      <rect class="bad" x="496" y="252" width="136" height="48"/>
+      <text class="m b" x="564" y="273">pod 10.0.1.9</text>
+      <text class="m dim" x="564" y="290">not Ready</text>
+      <path class="ar" d="M460 164L496 120" marker-end="url(#ah)"/>
+      <path class="ar" d="M460 180L496 194" marker-end="url(#ah)"/>
+      <text class="dim" x="484" y="268" text-anchor="end">listed as not ready,</text>
+      <text class="dim" x="484" y="282" text-anchor="end">so kube-proxy skips it</text>
+      <text class="dim" x="10" y="322">In iptables and nftables mode the ClusterIP is on no interface.</text>
+      <text class="dim" x="10" y="336">It exists only in kube-proxy's rules, on every node.</text>
+    </svg>
+    </div>
+    <figcaption>Example addresses. The client talks to the Service address, and the node's rules send each connection to one ready pod.</figcaption>
+  </figure>
+
+  <h2>kube-proxy has three modes on Linux, and one is on its way out</h2>
+  <table tabindex="0">
+    <thead><tr><th>mode</th><th>status</th></tr></thead>
+    <tbody>
+      <tr><td><code>iptables</code></td><td>The default. It works everywhere, and the rules slow down as the number of Services grows.</td></tr>
+      <tr><td><code>nftables</code></td><td>GA since v1.33. It needs Linux kernel 5.13 or later. It is the recommended choice, and you have to select it yourself because clusters do not switch on upgrade.</td></tr>
+      <tr><td><code>ipvs</code></td><td>Deprecated since v1.35. SIG Network wrote on 16 Nov 2026 that it plans to remove it in v1.40, and recommends nftables for v1.36 and later.</td></tr>
+    </tbody>
+  </table>
+  <p>If you run IPVS, plan the move to nftables. In a kubeadm cluster that means setting <code>mode: nftables</code> in the kube-proxy ConfigMap and restarting kube-proxy. IPVS-specific options need to be mapped across by hand. The announcement is linked at the end.</p>
+
+  <h2>service types</h2>
+  <table tabindex="0">
+    <thead><tr><th>type</th><th>what it adds</th></tr></thead>
+    <tbody>
+      <tr><td><code>ClusterIP</code></td><td>The virtual IP, reachable only inside the cluster. The default.</td></tr>
+      <tr><td><code>NodePort</code></td><td>Also opens a port on every node (30000 to 32767 by default) that forwards to the Service.</td></tr>
+      <tr><td><code>LoadBalancer</code></td><td>Also asks the cloud provider for an external load balancer pointing at the Service.</td></tr>
+      <tr><td><code>ExternalName</code></td><td>No proxying. The Service name resolves to a DNS name you give it.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>layer 4 and layer 7</h2>
+  <p>A Service works at layer 4. It sees an IP address and a port, over TCP or UDP, and nothing of the HTTP request inside. It cannot send <code>/api</code> to one Service and <code>/static</code> to another, or choose by hostname, or terminate TLS for several domains. That is layer 7 work, and it needs something that reads HTTP: an Ingress controller or a Gateway API implementation, running as pods in your cluster behind a LoadBalancer or NodePort Service.</p>
+
+  <h2>ingress is frozen, and ingress-nginx is retired</h2>
+  <p>The Ingress API is still GA, but it is feature-frozen, and new development has moved to the Gateway API. The most widely used controller, the community <b>ingress-nginx</b>, was retired. SIG Network announced on 11 Nov 2025 that maintenance would end in March 2026. After that date there are no more releases, bug fixes or security updates. Existing deployments keep running, but nothing patches them. The retirement covers that one project. Other Ingress controllers are separate projects, and they are not part of it.</p>
+  <p>The Gateway API, whose core resources have been GA since October 2023, is the recommended replacement. It splits what Ingress puts in one object. A platform team owns the <code>Gateway</code> (the listener, the addresses, the TLS), and each app team owns an <code>HTTPRoute</code> that attaches to it:</p>
+  <figure>
+    <div class="diagram" tabindex="0">
+    <svg viewBox="0 0 640 240" role="img" aria-labelledby="fg-t fg-d">
+      <title id="fg-t">Who owns what in the Gateway API</title>
+      <desc id="fg-d">The platform team owns the GatewayClass and the Gateway. An app team owns an HTTPRoute, which attaches to the Gateway with parentRefs and sends traffic to Services with backendRefs.</desc>
+      <rect class="virt" x="8" y="8" width="206" height="222"/>
+      <text class="tag" x="20" y="28">platform team owns</text>
+      <rect class="box" x="24" y="44" width="174" height="50"/>
+      <text class="m b" x="111" y="66">GatewayClass</text>
+      <text class="m dim" x="111" y="84">which controller</text>
+      <rect class="hub" x="24" y="140" width="174" height="62"/>
+      <text class="m b" x="111" y="162">Gateway</text>
+      <text class="m dim" x="111" y="180">listeners, addresses,</text>
+      <text class="m dim" x="111" y="194">TLS</text>
+      <path class="ar" d="M111 140V94" marker-end="url(#ah)"/>
+      <text class="dim" x="120" y="122">uses class</text>
+
+      <rect class="virt" x="286" y="88" width="196" height="142"/>
+      <text class="tag" x="298" y="108">app team owns</text>
+      <rect class="hub" x="302" y="126" width="164" height="76"/>
+      <text class="m b" x="384" y="150">HTTPRoute</text>
+      <text class="m dim" x="384" y="168">hostnames, paths,</text>
+      <text class="m dim" x="384" y="182">rules</text>
+      <path class="ar" d="M302 164H198" marker-end="url(#ah)"/>
+      <text class="dim m" x="250" y="156">parentRefs</text>
+
+      <rect class="box" x="530" y="90" width="100" height="44"/>
+      <text class="m b" x="580" y="116">Service api</text>
+      <rect class="box" x="530" y="176" width="100" height="44"/>
+      <text class="m b" x="580" y="202">Service web</text>
+      <path class="ar" d="M466 164L530 112" marker-end="url(#ah)"/>
+      <path class="ar" d="M466 164L530 198" marker-end="url(#ah)"/>
+      <text class="dim" x="506" y="160">backendRefs</text>
+    </svg>
+    </div>
+    <figcaption>The Gateway belongs to the platform team. App teams attach their own routes to it and point them at Services.</figcaption>
+  </figure>
+<pre tabindex="0"><code>apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web
+spec:
+  parentRefs:
+    - name: public-gateway
+  hostnames: ["example.com"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api
+          port: 80</code></pre>
+
+  <h2>one request, end to end</h2>
+  <figure>
+    <div class="diagram" tabindex="0">
+    <svg viewBox="0 0 640 440" role="img" aria-labelledby="fe-t fe-d">
+      <title id="fe-t">One request, end to end</title>
+      <desc id="fe-d">A client resolves the name through DNS to a cloud load balancer, which works at layer 4. The load balancer typically sends traffic to a NodePort on one of the nodes, where kube-proxy's rules forward it to a gateway pod. The gateway pod reads the HTTP host and path at layer 7 and picks a route. It then reads the route's Service EndpointSlices and usually sends to the IP of one ready pod directly.</desc>
+      <rect class="virt" x="24" y="166" width="592" height="240"/>
+      <text class="tag" x="608" y="182" text-anchor="end">inside the cluster</text>
+
+      <rect class="box" x="40" y="20" width="230" height="52"/>
+      <text class="m b" x="155" y="44">client</text>
+      <text class="m dim" x="155" y="62">browser, curl, a service</text>
+      <path class="ar" d="M155 72V100" marker-end="url(#ah)"/>
+      <text class="dim" x="170" y="90">DNS: example.com becomes the load balancer's IP</text>
+
+      <rect class="box" x="40" y="100" width="230" height="52"/>
+      <text class="m b" x="155" y="124">cloud load balancer</text>
+      <text class="m dim" x="155" y="142">for a LoadBalancer Service</text>
+      <text class="dim" x="290" y="118">typically sends to a NodePort</text>
+      <text class="dim" x="290" y="132">on one of the nodes</text>
+      <rect class="box" x="560" y="114" width="56" height="26"/>
+      <text class="m b" x="588" y="132">L4</text>
+      <path class="ar" d="M155 152V180" marker-end="url(#ah)"/>
+
+      <rect class="vbox" x="40" y="180" width="230" height="52"/>
+      <text class="m b" x="155" y="204">node: kube-proxy rules</text>
+      <text class="m dim" x="155" y="222">gateway Service's NodePort</text>
+      <text class="dim" x="290" y="200">kube-proxy forwards the connection</text>
+      <text class="dim" x="290" y="214">to one gateway pod</text>
+      <rect class="box" x="560" y="194" width="56" height="26"/>
+      <text class="m b" x="588" y="212">L4</text>
+      <path class="ar" d="M155 232V260" marker-end="url(#ah)"/>
+
+      <rect class="hub" x="40" y="260" width="230" height="52"/>
+      <text class="m b" x="155" y="284">gateway pod</text>
+      <text class="m dim" x="155" y="302">reads the HTTP request</text>
+      <text class="dim" x="290" y="280">reads host and path,</text>
+      <text class="dim" x="290" y="294">picks the route and its Service</text>
+      <rect class="hub" x="560" y="274" width="56" height="26"/>
+      <text class="m b" x="588" y="292">L7</text>
+      <path class="ar" d="M155 312V340" marker-end="url(#ah)"/>
+
+      <rect class="ok" x="40" y="340" width="230" height="52"/>
+      <text class="m b" x="155" y="364">pod</text>
+      <text class="m dim" x="155" y="382">one of the Service's pods</text>
+      <text class="dim" x="290" y="360">the gateway reads the Service's</text>
+      <text class="dim" x="290" y="374">EndpointSlices, sends to a pod IP</text>
+      <text class="dim" x="10" y="428">L4 sees an IP address and a port. L7 sees the HTTP request.</text>
+    </svg>
+    </div>
+    <figcaption>The load balancer and the node's rules only see addresses and ports. Only the gateway reads the HTTP request, and it usually sends straight to a pod IP.</figcaption>
+  </figure>
+
+  <h2>where it breaks</h2>
+  <table tabindex="0">
+    <thead><tr><th>symptom</th><th>check</th></tr></thead>
+    <tbody>
+      <tr><td>Service name does not resolve, pod IP works</td><td>DNS: the CoreDNS pods, and the pod's <code>/etc/resolv.conf</code>.</td></tr>
+      <tr><td>Service resolves but connections fail</td><td><code>kubectl get endpointslices -o yaml</code>. No endpoints means the selector matches nothing. Endpoints with <code>ready: false</code> mean no pod is ready yet.</td></tr>
+      <tr><td><code>LoadBalancer</code> stays <code>&lt;pending&gt;</code></td><td>Whether a cloud controller or load balancer implementation is installed, and the cloud quota.</td></tr>
+      <tr><td>404 from the gateway</td><td>That the route is attached to the Gateway, and that the hostname and path match the request.</td></tr>
+      <tr><td>NodePort answers on some nodes only</td><td>The Service's <code>externalTrafficPolicy</code>. With <code>Local</code>, only nodes that run a matching pod answer.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>what I checked</h2>
+  <p>The dates and versions above come from the Kubernetes project's own posts, linked below, and I rechecked them in November 2026. I wrote this from the documentation, not from experiments on a cluster. The commands and the table are a starting point. If you are moving off ingress-nginx or IPVS, read the migration notes for your own distribution and test on a copy of your cluster first.</p>
+
+  <h2>sources</h2>
+  <ul>
+    <li><a href="https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/">Ingress NGINX retirement</a> (Kubernetes blog, 11 Nov 2025)</li>
+    <li><a href="https://kubernetes.io/blog/2025/02/28/nftables-kube-proxy/">NFTables mode for kube-proxy</a> (Kubernetes blog, 28 Feb 2025)</li>
+    <li><a href="https://kubernetes.io/blog/2026/11/16/ipvs-removal/">Scheduling the removal of the kube-proxy IPVS backend</a> (Kubernetes blog, 16 Nov 2026)</li>
+  </ul>
+</main>
+</body>
+</html>

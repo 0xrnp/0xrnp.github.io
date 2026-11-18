@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>What happens when you run kubectl apply · 0xrnp</title>
+<meta name="description" content="Follow one Deployment from kubectl apply to a running container: which component does each step, and where it breaks.">
+<link rel="canonical" href="https://0xrnp.github.io/writing/kubernetes-architecture/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="What happens when you run kubectl apply">
+<meta property="og:description" content="Follow one Deployment from kubectl apply to a running container: which component does each step, and where it breaks.">
+<meta property="og:url" content="https://0xrnp.github.io/writing/kubernetes-architecture/">
+<meta property="og:image" content="https://0xrnp.github.io/writing/kubernetes-architecture/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="What happens when you run kubectl apply: seven steps from the API server to a running pod.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://0xrnp.github.io/writing/kubernetes-architecture/og.png">
+<link rel="preload" href="/fonts/MapleMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Maple Mono"; src: url("/fonts/MapleMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+  :root {
+    --mono: "Maple Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #f4f2ee; --ink: #22252b; --muted: #595e68; --accent: #a8431a; --panel: #e9e6e0; --add: #19672f; --del: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171b; --ink: #dfe2e7; --muted: #8b919c; --accent: #f0905a; --panel: #1d2026; --add: #6fd08c; --del: #f07a72; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--mono); }
+  main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 3rem; }
+  h1 { font: 400 clamp(2rem, 7vw, 3rem)/1.1 Georgia, "Times New Roman", serif; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+  h2 { font-size: 1rem; font-weight: 700; color: var(--accent); margin: 2.5rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+  pre { background: var(--panel); padding: 1rem 1.25rem; overflow-x: auto; font: inherit; font-size: 0.85rem; margin: 0 0 1rem; }
+  pre, code { font-variant-ligatures: none; }
+  code { font: inherit; font-variant-ligatures: none; }
+  p code, li code, td code { background: var(--panel); padding: 0.05rem 0.35rem; font-size: 0.88em; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin: 0 0 1rem; display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; vertical-align: top; }
+  th { color: var(--accent); border-bottom: 1px solid var(--muted); }
+  ul, ol { margin: 0 0 1rem; padding-left: 1.25rem; }
+  li { margin-bottom: 0.3rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+  figure { margin: 0 0 1.5rem; }
+  figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+  .diagram { overflow-x: auto; background: var(--panel); padding: 0.75rem; }
+  .diagram:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .diagram svg { display: block; width: 100%; min-width: 600px; height: auto; }
+  svg text { font-family: var(--mono); font-size: 13px; fill: var(--ink); }
+  svg .m { text-anchor: middle; }
+  svg .b { font-weight: 700; }
+  svg .dim { font-size: 11.5px; fill: var(--muted); }
+  svg .tag { font-weight: 700; fill: var(--accent); }
+  svg .box { fill: var(--bg); stroke: var(--muted); stroke-width: 1.2; }
+  svg .hub { fill: var(--bg); stroke: var(--accent); stroke-width: 1.8; }
+  svg .virt { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; }
+  svg .vbox { fill: var(--bg); stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 5 4; }
+  svg .ok { fill: var(--bg); stroke: var(--add); stroke-width: 1.8; }
+  svg .bad { fill: var(--bg); stroke: var(--del); stroke-width: 1.8; stroke-dasharray: 5 4; }
+  svg .ar { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+  svg .badge { fill: var(--accent); }
+  svg .badgeText { fill: var(--bg); font-size: 12px; font-weight: 700; text-anchor: middle; }
+  svg .mk { fill: var(--accent); }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--bg); padding: 0.4rem 0.8rem; }
+  .skip:focus { left: 0.5rem; top: 0.5rem; }
+  pre:focus-visible, table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0 0L10 5L0 10z"/></marker>
+</defs></svg>
+<main id="main">
+  <p><a href="/writing/">&larr; writing</a></p>
+
+  <h1>What happens when you run kubectl apply</h1>
+  <p class="muted">Rudra Narayan Panda &middot; <time datetime="2026-11-19">19 Nov 2026</time></p>
+
+  <p>Kubernetes has a lot of parts, but they follow one rule: every component talks to the API server, and nothing else keeps state. This post follows one Deployment from <code>kubectl apply</code> to a running container and names the component that does each step. It is the first of two. The second covers how a request reaches the pod. Written in November 2026, when the current release is v1.37.</p>
+
+  <h2>the one rule</h2>
+  <p>The API server is the only component that reads and writes etcd. Everything else watches the API server for the objects it cares about, does its job, and writes the result back as a change to an object. Nobody calls anybody directly.</p>
+  <figure>
+    <div class="diagram" tabindex="0">
+    <svg viewBox="0 0 640 330" role="img" aria-labelledby="fa-t fa-d">
+      <title id="fa-t">Components around the API server</title>
+      <desc id="fa-d">kubectl, the scheduler, the controllers, the cloud controller manager and every kubelet talk to kube-apiserver. Only kube-apiserver talks to etcd.</desc>
+      <rect class="virt" x="6" y="36" width="474" height="288"/>
+      <text class="tag" x="18" y="56">control plane</text>
+      <rect class="virt" x="494" y="186" width="140" height="138"/>
+      <text class="tag" x="506" y="314">worker node</text>
+
+      <rect class="box" x="22" y="84" width="120" height="52"/>
+      <text class="m b" x="82" y="106">etcd</text>
+      <text class="m dim" x="82" y="124">API server only</text>
+      <rect class="hub" x="190" y="84" width="170" height="52"/>
+      <text class="m b" x="275" y="106">kube-apiserver</text>
+      <text class="m dim" x="275" y="124">the only door</text>
+      <rect class="box" x="494" y="84" width="140" height="52"/>
+      <text class="m b" x="564" y="106">kubectl</text>
+      <text class="m dim" x="564" y="124">you, and tools</text>
+      <path class="ar" d="M142 110H190" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path class="ar" d="M494 110H360" marker-end="url(#ah)"/>
+
+      <rect class="box" x="22" y="214" width="136" height="60"/>
+      <text class="m b" x="90" y="240">scheduler</text>
+      <text class="m dim" x="90" y="258">picks a node</text>
+      <rect class="box" x="172" y="214" width="136" height="60"/>
+      <text class="m b" x="240" y="240">controllers</text>
+      <text class="m dim" x="240" y="258">reconcile state</text>
+      <rect class="box" x="322" y="214" width="136" height="60"/>
+      <text class="m b" x="390" y="240">cloud controller</text>
+      <text class="m dim" x="390" y="258">cloud only</text>
+      <rect class="box" x="504" y="222" width="120" height="52"/>
+      <text class="m b" x="564" y="246">kubelet</text>
+      <text class="m dim" x="564" y="264">one per node</text>
+      <path class="ar" d="M90 214L215 137" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path class="ar" d="M240 214L275 137" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path class="ar" d="M390 214L335 137" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path class="ar" d="M540 222L361 131" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <text class="dim" x="18" y="308">every arrow: watch the API server, then write the result back</text>
+    </svg>
+    </div>
+    <figcaption>Everything talks to the API server, and only the API server talks to etcd.</figcaption>
+  </figure>
+  <p>A controller compares the desired state in an object with what it sees and takes one step toward it, over and over. That is why a cluster survives a crashed controller: the restarted one reads the objects and carries on from wherever things stand.</p>
+
+  <h2>the control plane</h2>
+  <ul>
+    <li><b>kube-apiserver</b> is the front door. A request is authenticated, authorized, passed through admission controllers, validated, and only then written to etcd. It keeps no state of its own, so you can run several behind a load balancer.</li>
+    <li><b>etcd</b> is the key-value store that holds the cluster's state. It uses the Raft consensus algorithm, so writes need a majority of members. That is why clusters run 3 or 5 members and not 2 or 4: a 4-member cluster tolerates one failure, the same as 3.</li>
+    <li><b>kube-scheduler</b> picks a node for each pod that has none. It filters out nodes that cannot run the pod (not enough CPU or memory, a taint the pod does not tolerate, an affinity rule), scores the rest, and records its choice on the pod. It does not start anything.</li>
+    <li><b>kube-controller-manager</b> is one process that runs many controllers: Deployment, ReplicaSet, Node, Job, EndpointSlice and more. Each one runs the loop above.</li>
+    <li><b>cloud-controller-manager</b> exists only on cloud clusters. It holds the cloud-specific loops, such as creating a cloud load balancer for a Service of type <code>LoadBalancer</code> and noticing when the VM behind a node is gone.</li>
+  </ul>
+
+  <h2>the worker node</h2>
+  <ul>
+    <li><b>kubelet</b> is the agent on each node. It watches for pods assigned to its node, asks the container runtime to start them, runs their probes, and reports status back to the API server. It runs as a service on the node, not as a pod.</li>
+    <li><b>container runtime</b> is containerd or CRI-O. The kubelet talks to it through the Container Runtime Interface (CRI). It pulls images, starts containers, and calls the CNI plugin to set up each pod's network. Docker Engine is not called directly any more: dockershim was removed in v1.24.</li>
+    <li><b>kube-proxy</b> programs each node so traffic to a Service address reaches a pod. The second post covers it.</li>
+  </ul>
+
+  <figure>
+    <div class="diagram" tabindex="0">
+    <svg viewBox="0 0 640 250" role="img" aria-labelledby="fc-t fc-d">
+      <title id="fc-t">What runs on a worker node</title>
+      <desc id="fc-d">The kubelet gets its pods from the API server, starts them through the container runtime, and the runtime calls the network plugin for an IP address. kube-proxy gets Services and EndpointSlices from the API server and programs packet rules.</desc>
+      <rect class="hub" x="10" y="96" width="120" height="52"/>
+      <text class="m b" x="70" y="126">kube-apiserver</text>
+      <rect class="virt" x="160" y="8" width="470" height="236"/>
+      <text class="tag" x="172" y="28">worker node</text>
+
+      <rect class="box" x="186" y="64" width="124" height="50"/>
+      <text class="m b" x="248" y="86">kubelet</text>
+      <text class="m dim" x="248" y="104">node agent</text>
+      <rect class="box" x="372" y="44" width="140" height="50"/>
+      <text class="m b" x="442" y="66">runtime</text>
+      <text class="m dim" x="442" y="84">containerd, CRI-O</text>
+      <rect class="box" x="540" y="44" width="84" height="50"/>
+      <text class="m b" x="582" y="73" style="font-size:12px">containers</text>
+      <rect class="box" x="372" y="118" width="140" height="46"/>
+      <text class="m b" x="442" y="138">network plugin</text>
+      <text class="m dim" x="442" y="154">CNI</text>
+
+      <rect class="box" x="186" y="172" width="124" height="50"/>
+      <text class="m b" x="248" y="194">kube-proxy</text>
+      <text class="m dim" x="248" y="212">Service rules</text>
+      <rect class="box" x="372" y="172" width="140" height="50"/>
+      <text class="m b" x="442" y="194">packet rules</text>
+      <text class="m dim" x="442" y="212">iptables, nftables</text>
+
+      <path class="ar" d="M130 112L186 90" marker-end="url(#ah)"/>
+      <path class="ar" d="M130 132L186 196" marker-end="url(#ah)"/>
+      <path class="ar" d="M310 82L372 70" marker-end="url(#ah)"/>
+      <text class="dim m" x="341" y="62">CRI</text>
+      <path class="ar" d="M442 94V118" marker-end="url(#ah)"/>
+      <text class="dim" x="452" y="110">calls</text>
+      <path class="ar" d="M512 69H540" marker-end="url(#ah)"/>
+      <path class="ar" d="M310 197H372" marker-end="url(#ah)"/>
+      <text class="dim m" x="341" y="190">programs</text>
+      <text class="dim" x="14" y="76">pods for</text>
+      <text class="dim" x="14" y="89">this node</text>
+      <text class="dim" x="14" y="176">Services and</text>
+      <text class="dim" x="14" y="189">EndpointSlices</text>
+    </svg>
+    </div>
+    <figcaption>The kubelet drives the runtime, and the runtime calls the network plugin. kube-proxy only writes packet rules.</figcaption>
+  </figure>
+
+  <h2>following one deployment</h2>
+<pre tabindex="0"><code>kubectl apply -f web.yaml     # a Deployment with 3 replicas
+kubectl get pods -w           # watch them go Pending, then Running
+kubectl describe pod &lt;name&gt;   # its Events are the trail below</code></pre>
+  <p>Read the diagram top to bottom. The box on the left is who acts, and the box on the right is what it writes to the API server. That write is what wakes the next component.</p>
+  <figure>
+    <div class="diagram" tabindex="0">
+    <svg viewBox="0 0 640 590" role="img" aria-labelledby="fb-t fb-d">
+      <title id="fb-t">One Deployment, step by step</title>
+      <desc id="fb-d">Seven steps. kubectl writes a Deployment. The Deployment controller writes a ReplicaSet. The ReplicaSet controller writes three Pods. The scheduler sets a node on each Pod. The kubelet starts the containers and reports status. The kubelet reports the Pod ready. The EndpointSlice controller marks the pods ready in the Service's EndpointSlice.</desc>
+
+      <circle class="badge" cx="20" cy="43" r="10"/><text class="badgeText" x="20" y="47">1</text>
+      <rect class="hub" x="40" y="16" width="204" height="54"/>
+      <text class="m b" x="142" y="40">kubectl</text><text class="m dim" x="142" y="58">your terminal</text>
+      <path class="ar" d="M244 43H278" marker-end="url(#ah)"/>
+      <rect class="box" x="278" y="16" width="348" height="54"/>
+      <text x="292" y="40">Deployment web</text><text class="dim" x="292" y="58">stored after auth, RBAC, admission, validation</text>
+      <path class="ar" d="M452 70V88H142V100" marker-end="url(#ah)"/>
+      <text class="dim" x="156" y="84">this write wakes the next component</text>
+
+      <circle class="badge" cx="20" cy="127" r="10"/><text class="badgeText" x="20" y="131">2</text>
+      <rect class="hub" x="40" y="100" width="204" height="54"/>
+      <text class="m b" x="142" y="124">Deployment controller</text><text class="m dim" x="142" y="142">kube-controller-manager</text>
+      <path class="ar" d="M244 127H278" marker-end="url(#ah)"/>
+      <rect class="box" x="278" y="100" width="348" height="54"/>
+      <text x="292" y="124">ReplicaSet for the Deployment</text><text class="dim" x="292" y="142">wants 3 pods, has 0</text>
+      <path class="ar" d="M452 154V172H142V184" marker-end="url(#ah)"/>
+      <text class="dim" x="156" y="168">wakes</text>
+
+      <circle class="badge" cx="20" cy="211" r="10"/><text class="badgeText" x="20" y="215">3</text>
+      <rect class="hub" x="40" y="184" width="204" height="54"/>
+      <text class="m b" x="142" y="208">ReplicaSet controller</text><text class="m dim" x="142" y="226">kube-controller-manager</text>
+      <path class="ar" d="M244 211H278" marker-end="url(#ah)"/>
+      <rect class="box" x="278" y="184" width="348" height="54"/>
+      <text x="292" y="208">3 Pod objects</text><text class="dim" x="292" y="226">no node yet, status Pending</text>
+      <path class="ar" d="M452 238V256H142V268" marker-end="url(#ah)"/>
+      <text class="dim" x="156" y="252">wakes</text>
+
+      <circle class="badge" cx="20" cy="295" r="10"/><text class="badgeText" x="20" y="299">4</text>
+      <rect class="hub" x="40" y="268" width="204" height="54"/>
+      <text class="m b" x="142" y="292">scheduler</text><text class="m dim" x="142" y="310">kube-scheduler</text>
+      <path class="ar" d="M244 295H278" marker-end="url(#ah)"/>
+      <rect class="box" x="278" y="268" width="348" height="54"/>
+      <text x="292" y="292">a node name on each Pod</text><text class="dim" x="292" y="310">filter, score, bind; still Pending</text>
+      <path class="ar" d="M452 322V340H142V352" marker-end="url(#ah)"/>
+      <text class="dim" x="156" y="336">wakes</text>
+
+      <circle class="badge" cx="20" cy="379" r="10"/><text class="badgeText" x="20" y="383">5</text>
+      <rect class="hub" x="40" y="352" width="204" height="54"/>
+      <text class="m b" x="142" y="376">kubelet</text><text class="m dim" x="142" y="394">on the chosen node</text>
+      <path class="ar" d="M244 379H278" marker-end="url(#ah)"/>
+      <rect class="box" x="278" y="352" width="348" height="54"/>
+      <text x="292" y="376">kubectl shows ContainerCreating, Running</text><text class="dim" x="292" y="394">image pulled, containers up, IP from the CNI</text>
+      <path class="ar" d="M452 406V424H142V436" marker-end="url(#ah)"/>
+      <text class="dim" x="156" y="420">wakes</text>
+
+      <circle class="badge" cx="20" cy="463" r="10"/><text class="badgeText" x="20" y="467">6</text>
+      <rect class="hub" x="40" y="436" width="204" height="54"/>
+      <text class="m b" x="142" y="460">kubelet</text><text class="m dim" x="142" y="478">runs the readiness probe</text>
+      <path class="ar" d="M244 463H278" marker-end="url(#ah)"/>
+      <rect class="ok" x="278" y="436" width="348" height="54"/>
+      <text x="292" y="460">Pod condition: Ready</text><text class="dim" x="292" y="478">the probe passed</text>
+      <path class="ar" d="M452 490V508H142V520" marker-end="url(#ah)"/>
+      <text class="dim" x="156" y="504">wakes</text>
+
+      <circle class="badge" cx="20" cy="547" r="10"/><text class="badgeText" x="20" y="551">7</text>
+      <rect class="hub" x="40" y="520" width="204" height="54"/>
+      <text class="m b" x="142" y="544">EndpointSlice controller</text><text class="m dim" x="142" y="562">if a Service selects it</text>
+      <path class="ar" d="M244 547H278" marker-end="url(#ah)"/>
+      <rect class="box" x="278" y="520" width="348" height="54"/>
+      <text x="292" y="544">pod marked ready in the EndpointSlice</text><text class="dim" x="292" y="562">kube-proxy on every node updates its rules</text>
+    </svg>
+    </div>
+    <figcaption>One Deployment, from apply to traffic. Each box on the right is a write to the API server.</figcaption>
+  </figure>
+  <p>The same steps in words:</p>
+  <ol>
+    <li><b>kubectl</b> sends the Deployment to the API server. It is authenticated, checked against RBAC, run through admission, validated, and written to etcd.</li>
+    <li>The <b>Deployment controller</b> sees a Deployment with no ReplicaSet and creates one.</li>
+    <li>The <b>ReplicaSet controller</b> sees a ReplicaSet that wants 3 pods and has none, and creates 3 Pod objects. They have no node yet, so they show as <code>Pending</code>.</li>
+    <li>The <b>scheduler</b> sees pods without a node, filters and scores the nodes, and binds each pod to one.</li>
+    <li>The <b>kubelet</b> on each chosen node sees a pod assigned to it. It asks the runtime to pull the image and start the containers. The runtime calls the network plugin (CNI) to give the pod an IP address.</li>
+    <li>The kubelet reports status back. When the readiness probe passes, the pod is marked <code>Ready</code>.</li>
+    <li>If a Service selects these pods, the <b>EndpointSlice controller</b> marks each pod's endpoint ready. It was listed as not ready from the moment the pod got an IP. <b>kube-proxy</b> on every node then updates its rules. Only now does Service traffic reach the new pods.</li>
+  </ol>
+  <p>Each step is a write to the API server that wakes the next component. In <code>kubectl describe pod</code>, the <code>Scheduled</code> event comes from the scheduler and <code>Pulling</code>, <code>Pulled</code>, <code>Created</code> and <code>Started</code> come from the kubelet.</p>
+
+  <h2>where it breaks</h2>
+  <p>Knowing the steps tells you where to look.</p>
+  <table tabindex="0">
+    <thead><tr><th>symptom</th><th>step that failed</th><th>where to look</th></tr></thead>
+    <tbody>
+      <tr><td><code>Pending</code> for a long time</td><td>4, scheduling</td><td><code>kubectl describe pod</code>. The event says why: not enough CPU or memory, an untolerated taint, an unbound volume.</td></tr>
+      <tr><td><code>ContainerCreating</code> for a long time</td><td>5, kubelet, runtime or CNI</td><td>The pod's events: image pull errors, network plugin errors.</td></tr>
+      <tr><td><code>ImagePullBackOff</code></td><td>5, the runtime cannot fetch the image</td><td>The image name and tag, and the registry credentials.</td></tr>
+      <tr><td><code>CrashLoopBackOff</code></td><td>after 5, your container started and exited</td><td><code>kubectl logs --previous</code></td></tr>
+      <tr><td><code>kubectl</code> hangs or times out</td><td>1, API server or etcd</td><td>API server and etcd health.</td></tr>
+      <tr><td>node <code>NotReady</code></td><td>the kubelet stopped reporting</td><td>The kubelet service and its logs on that node.</td></tr>
+      <tr><td>Service has no ready endpoints</td><td>6 and 7, readiness or selector</td><td><code>kubectl get endpointslices -o yaml</code> and look for <code>ready: false</code>. Then the pod labels against the selector, and the readiness probe.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>what changed recently</h2>
+  <p>Three things worth knowing if your mental model is from older guides:</p>
+  <ul>
+    <li><b>In-place pod resize</b> reached GA in v1.35. You can change the CPU and memory of a running pod without recreating it. Whether a container restarts depends on its resize policy. v1.36 added pod-level resize as beta (<a href="https://kubernetes.io/blog/2026/04/30/kubernetes-v1-36-inplace-pod-level-resources-beta/">release post</a>).</li>
+    <li><b>Dynamic Resource Allocation</b> reached GA in v1.34. Devices such as GPUs are requested through ResourceClaims, and the scheduler sees per-device availability, not just node totals (<a href="https://kubernetes.io/blog/2025/09/01/kubernetes-v1-34-dra-updates/">release post</a>). v1.37 made its extended-resource support GA.</li>
+    <li><b>v1.37 "Garhwal"</b> is the current release, from 26 Aug 2026 (<a href="https://kubernetes.io/blog/2026/08/26/kubernetes-v1-37-release/">release post</a>).</li>
+  </ul>
+
+  <h2>what I checked</h2>
+  <p>I checked the version claims against the Kubernetes release posts linked above. I wrote this from the documentation, not from experiments on a cluster, so treat the table as a place to start looking. Details move between releases: run <code>kubectl version</code> and read the notes for the one you have.</p>
+  <p>Next: <a href="/writing/kubernetes-networking/">how a request reaches a pod</a>.</p>
+</main>
+</body>
+</html>
