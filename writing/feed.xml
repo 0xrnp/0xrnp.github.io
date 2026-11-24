@@ -5,11 +5,25 @@
   <link rel="self" type="application/atom+xml" href="https://0xrnp.github.io/writing/feed.xml"/>
   <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/"/>
   <id>https://0xrnp.github.io/writing/</id>
-  <updated>2026-11-19T00:00:00Z</updated>
+  <updated>2026-11-24T00:00:00Z</updated>
   <author>
     <name>Rudra Narayan Panda</name>
     <uri>https://0xrnp.github.io/</uri>
   </author>
+  <entry>
+    <title>What context.Context is actually for</title>
+    <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/go-context-explained/"/>
+    <id>https://0xrnp.github.io/writing/go-context-explained/</id>
+    <updated>2026-11-24T00:00:00Z</updated>
+    <summary>Why Go has context, how the cancellation tree works, every way to derive one (cancel, timeout, cause, value, WithoutCancel, AfterFunc), and the rules that keep it from leaking. With measured output.</summary>
+  </entry>
+  <entry>
+    <title>Go has no async/await. Here is what it has instead.</title>
+    <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/go-async-without-await/"/>
+    <id>https://0xrnp.github.io/writing/go-async-without-await/</id>
+    <updated>2026-11-24T00:00:00Z</updated>
+    <summary>Where did await go? Goroutines park instead of blocking threads, the netpoller hides an event loop, and a handful of patterns replace promises. With runnable examples and measured output.</summary>
+  </entry>
   <entry>
     <title>How a request reaches a Kubernetes pod</title>
     <link rel="alternate" type="text/html" href="https://0xrnp.github.io/writing/kubernetes-networking/"/>
